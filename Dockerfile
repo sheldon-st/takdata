@@ -1,4 +1,4 @@
-FROM python:3.9.6
+FROM cicirello/pyaction:latest
 
 RUN mkdir /usr/src/app
 
