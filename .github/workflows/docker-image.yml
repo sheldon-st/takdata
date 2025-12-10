@@ -15,7 +15,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag adsb-to-cot:$(date +%s)
+      run: docker build . --file Dockerfile --tag ghcr.io/sheldon-st/adsb-to-cot:$(date +%s)
 # publish to github container registry
     - name: Publish to GitHub Container Registry
       run: docker push ghcr.io/sheldon-st/adsb-to-cot:$(date +%s)

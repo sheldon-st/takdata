@@ -36,7 +36,7 @@ class MySerializer(pytak.QueueWorker):
         async with aiohttp.ClientSession() as session:
             while True:
                 try:
-                    aircraft_data = await fetch_adsb_data(session)
+                    aircraft_data = await fetch_adsb_data(session, self.config)
                     if aircraft_data:
                         Logger.info("Processing %d aircraft", len(aircraft_data))
                         for aircraft in aircraft_data:
@@ -51,13 +51,22 @@ class MySerializer(pytak.QueueWorker):
                         import traceback
                         traceback.print_exc()
                 
-                await asyncio.sleep(3)
+                sleep_interval = float(self.config.get("SLEEP_INTERVAL", 3))
+                await asyncio.sleep(sleep_interval)
 
 
-async def fetch_adsb_data(session):
-    """Fetch ADS-B data from opendata.adsb.fi API for NYC area."""
-    # NYC coordinates: 40.7128, -74.0060
-    url = "https://opendata.adsb.fi/api/v2/lat/40.7128/lon/-74.0060/dist/15"
+async def fetch_adsb_data(session, config=None):
+    """Fetch ADS-B data from opendata.adsb.fi API for configurable area."""
+    if config is None:
+        config = {}
+    
+    # Default to NYC coordinates: 40.7128, -74.0060, 15 mile radius
+    lat = config.get("ADSB_LAT", "40.7128")
+    lon = config.get("ADSB_LON", "-74.0060") 
+    distance = config.get("ADSB_DISTANCE", "15")
+    base_url = config.get("ADSB_API_URL", "https://opendata.adsb.fi/api/v2")
+    
+    url = f"{base_url}/lat/{lat}/lon/{lon}/dist/{distance}"
     
     try:
         async with session.get(url) as response:
@@ -425,9 +434,20 @@ async def main():
     config = ConfigParser()
     
     # Use environment variables for Docker compatibility
-    cot_url = os.getenv("COT_URL", "tls://host.docker.internal:8089")
+    # Default to localhost for better cross-platform compatibility
+    cot_url = os.getenv("COT_URL", "tls://localhost:8089")
     tls_password = os.getenv("PYTAK_TLS_CLIENT_PASSWORD", "atakatak")
     tls_cert = os.getenv("PYTAK_TLS_CLIENT_CERT", "certs/user1.p12")
+    
+    # Check if certificate file exists
+    if not os.path.exists(tls_cert):
+        Logger.warning("Client certificate not found at %s", tls_cert)
+        if os.getenv("PYTAK_TLS_DISABLE_CERT", "false").lower() in ["true", "1", "yes"]:
+            Logger.warning("Client certificate disabled - using anonymous connection")
+            tls_cert = None
+        else:
+            Logger.error("Client certificate required but not found. Set PYTAK_TLS_DISABLE_CERT=true to disable (testing only)")
+            Logger.error("Or provide a valid certificate file at %s", tls_cert)
     
     # Enhanced configuration with aircot-specific settings
     config["mycottool"] = {
@@ -436,7 +456,7 @@ async def main():
         "PYTAK_TLS_CLIENT_PASSWORD": tls_password,
         "PYTAK_TLS_DONT_CHECK_HOSTNAME": "1",
         "PYTAK_TLS_DONT_VERIFY": "1",
-        "PYTAK_TLS_CLIENT_CERT": tls_cert,
+        "PYTAK_TLS_CLIENT_CERT": tls_cert if tls_cert else "",
         
         # Aircot-specific settings
         "UID_KEY": os.getenv("UID_KEY", "ICAO"),
@@ -444,6 +464,13 @@ async def main():
         "COT_HOST_ID": os.getenv("COT_HOST_ID", "adsb-feeder"),
         "FEED_URL": os.getenv("FEED_URL", "opendata.adsb.fi/NYC"),
         "COT_ACCESS": os.getenv("COT_ACCESS", pytak.DEFAULT_COT_ACCESS),
+        
+        # ADS-B Data Source Configuration
+        "ADSB_LAT": os.getenv("ADSB_LAT", "40.7128"),  # Default: NYC latitude
+        "ADSB_LON": os.getenv("ADSB_LON", "-74.0060"),  # Default: NYC longitude
+        "ADSB_DISTANCE": os.getenv("ADSB_DISTANCE", "15"),  # Default: 15 mile radius
+        "ADSB_API_URL": os.getenv("ADSB_API_URL", "https://opendata.adsb.fi/api/v2"),
+        "SLEEP_INTERVAL": os.getenv("SLEEP_INTERVAL", "3"),  # Default: 3 seconds between polls
         
         # Altitude filtering (optional)
         "ALT_UPPER": os.getenv("ALT_UPPER", "0"),  # 0 = no upper limit
@@ -456,10 +483,19 @@ async def main():
     Logger.info("COT URL: %s", config.get('COT_URL'))
     Logger.info("Host ID: %s", config.get('COT_HOST_ID'))
     Logger.info("UID Key: %s", config.get('UID_KEY'))
+    Logger.info("ADS-B Location: %s, %s (radius: %s miles)", 
+                config.get('ADSB_LAT'), config.get('ADSB_LON'), config.get('ADSB_DISTANCE'))
+    Logger.info("ADS-B API: %s", config.get('ADSB_API_URL'))
+    Logger.info("Poll Interval: %s seconds", config.get('SLEEP_INTERVAL'))
 
     # Initializes worker queues and tasks.
     clitool = pytak.CLITool(config)
-    await clitool.setup()
+    try:
+        await clitool.setup()
+    except Exception as e:
+        Logger.error("Failed to connect to TAK server at %s: %s", config.get('COT_URL'), e)
+        Logger.error("This might be a DNS resolution issue. Try setting COT_URL environment variable to the correct server address.")
+        raise
 
     # Add your serializer to the asyncio task list.
     clitool.add_tasks(set([MySerializer(clitool.tx_queue, config)]))
