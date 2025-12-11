@@ -4,6 +4,7 @@ import asyncio
 import xml.etree.ElementTree as ET
 import os
 import logging
+import random
 from typing import Optional, Union
 
 from configparser import ConfigParser, SectionProxy
@@ -15,6 +16,15 @@ import aircot
 # Set up logging
 Logger = logging.getLogger(__name__)
 Debug = bool(os.getenv("DEBUG", "False").lower() in ["true", "1", "yes"])
+
+# List of realistic browser user agents to rotate through
+USER_AGENTS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+]
 
 class MySerializer(pytak.QueueWorker):
     """
@@ -56,28 +66,61 @@ class MySerializer(pytak.QueueWorker):
 
 
 async def fetch_adsb_data(session, config=None):
-    """Fetch ADS-B data from opendata.adsb.fi API for configurable area."""
+    """Fetch ADS-B data from opendata.adsb.fi API for configurable area or military aircraft."""
     if config is None:
         config = {}
-    
-    # Default to NYC coordinates: 40.7128, -74.0060, 15 mile radius
-    lat = config.get("ADSB_LAT", "40.7128")
-    lon = config.get("ADSB_LON", "-74.0060") 
-    distance = config.get("ADSB_DISTANCE", "15")
+
     base_url = config.get("ADSB_API_URL", "https://opendata.adsb.fi/api/v2")
-    
-    url = f"{base_url}/lat/{lat}/lon/{lon}/dist/{distance}"
-    
+    endpoint = config.get("ADSB_ENDPOINT", "geo")  # 'geo' or 'mil'
+
+    # Build URL based on endpoint type
+    if endpoint.lower() == "mil":
+        # Military endpoint - no args needed
+        url = f"{base_url}/mil"
+    else:
+        # Geographic endpoint - requires lat/lon/distance
+        lat = config.get("ADSB_LAT", "40.7128")
+        lon = config.get("ADSB_LON", "-74.0060")
+        distance = config.get("ADSB_DISTANCE", "15")
+        url = f"{base_url}/lat/{lat}/lon/{lon}/dist/{distance}"
+
     try:
-        async with session.get(url) as response:
+        # Use realistic browser headers to avoid rate limiting
+        headers = {
+            'User-Agent': random.choice(USER_AGENTS),
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Sec-Fetch-Dest': 'empty',
+            'Sec-Fetch-Mode': 'cors',
+            'Sec-Fetch-Site': 'same-origin',
+            'Sec-GPC': '1',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
+        }
+
+        Logger.info("Making ADS-B API request to: %s", url)
+        async with session.get(url, headers=headers) as response:
+            Logger.info("Received response from %s - Status: %d", url, response.status)
+
             if response.status == 200:
                 data = await response.json()
-                return data.get('aircraft', [])
+                # Support both 'aircraft' (opendata.adsb.fi) and 'ac' (api.adsb.lol) formats
+                aircraft = data.get('aircraft') or data.get('ac', [])
+                Logger.info("Successfully fetched %d aircraft from ADS-B API", len(aircraft))
+                return aircraft
             else:
-                Logger.warning("HTTP error %d fetching ADS-B data", response.status)
+                response_text = await response.text()
+                Logger.warning("HTTP error %d fetching ADS-B data from %s", response.status, url)
+                Logger.warning("Response body: %s", response_text[:200])  # Log first 200 chars of response
                 return []
     except Exception as e:
-        Logger.error("Error fetching ADS-B data: %s", e)
+        Logger.error("Error fetching ADS-B data from %s: %s", url, e)
+        if Debug:
+            import traceback
+            traceback.print_exc()
         return []
 
 
@@ -154,6 +197,18 @@ def adsb_to_cot_xml(
     _type = craft.get("t", craft.get("TargetType", 0))
     craft_type: str = str(_type).strip().upper()
 
+    _desc = craft.get("desc", craft.get("Description", ""))
+    desc: str = str(_desc).strip()
+
+    _emergency = craft.get("emergency", "")
+    emergency: str = str(_emergency).strip().lower()
+
+    _messages = craft.get("messages", 0)
+    messages: int = int(_messages) if _messages else 0
+
+    _dbFlags = craft.get("dbFlags", 0)
+    dbFlags: int = int(_dbFlags) if _dbFlags else 0
+
     # Handle altitude filtering with proper type conversion
     try:
         alt_upper: int = int(config.get("ALT_UPPER", "0"))
@@ -202,6 +257,20 @@ def adsb_to_cot_xml(
         category = aircot.set_category(cat, known_craft)
         remarks_fields.append(f"Cat.: {cat}")
         __adsb.set("cat", cat)
+
+    if desc:
+        __adsb.set("desc", desc)
+        remarks_fields.append(f"Desc: {desc}")
+
+    if emergency and emergency != "none":
+        __adsb.set("emergency", emergency)
+        remarks_fields.append(f"EMERGENCY: {emergency.upper()}")
+
+    if messages > 0:
+        __adsb.set("messages", str(messages))
+
+    if dbFlags > 0:
+        __adsb.set("dbFlags", str(dbFlags))
 
     if craft_type:
         __adsb.set("craft_type", str(craft_type))
@@ -466,6 +535,7 @@ async def main():
         "COT_ACCESS": os.getenv("COT_ACCESS", pytak.DEFAULT_COT_ACCESS),
         
         # ADS-B Data Source Configuration
+        "ADSB_ENDPOINT": os.getenv("ADSB_ENDPOINT", "geo"),  # 'geo' for geographic, 'mil' for military
         "ADSB_LAT": os.getenv("ADSB_LAT", "40.7128"),  # Default: NYC latitude
         "ADSB_LON": os.getenv("ADSB_LON", "-74.0060"),  # Default: NYC longitude
         "ADSB_DISTANCE": os.getenv("ADSB_DISTANCE", "15"),  # Default: 15 mile radius
@@ -483,9 +553,15 @@ async def main():
     Logger.info("COT URL: %s", config.get('COT_URL'))
     Logger.info("Host ID: %s", config.get('COT_HOST_ID'))
     Logger.info("UID Key: %s", config.get('UID_KEY'))
-    Logger.info("ADS-B Location: %s, %s (radius: %s miles)", 
-                config.get('ADSB_LAT'), config.get('ADSB_LON'), config.get('ADSB_DISTANCE'))
     Logger.info("ADS-B API: %s", config.get('ADSB_API_URL'))
+    Logger.info("Endpoint: %s", config.get('ADSB_ENDPOINT'))
+
+    if config.get('ADSB_ENDPOINT', 'geo').lower() == 'mil':
+        Logger.info("Tracking military aircraft worldwide")
+    else:
+        Logger.info("ADS-B Location: %s, %s (radius: %s miles)",
+                    config.get('ADSB_LAT'), config.get('ADSB_LON'), config.get('ADSB_DISTANCE'))
+
     Logger.info("Poll Interval: %s seconds", config.get('SLEEP_INTERVAL'))
 
     # Initializes worker queues and tasks.

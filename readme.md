@@ -12,9 +12,10 @@ Converts ADS-B aircraft data to Cursor on Target (CoT) events for TAK servers.
 - `PYTAK_TLS_CLIENT_CERT` - Path to TLS client certificate (default: `certs/user1.p12`)
 
 ### ADS-B Data Source Configuration
-- `ADSB_LAT` - Latitude for ADS-B data center point (default: `40.7128` - NYC)
-- `ADSB_LON` - Longitude for ADS-B data center point (default: `-74.0060` - NYC)
-- `ADSB_DISTANCE` - Radius in miles around center point (default: `15`)
+- `ADSB_ENDPOINT` - API endpoint type: `geo` for geographic area or `mil` for military aircraft (default: `geo`)
+- `ADSB_LAT` - Latitude for ADS-B data center point (default: `40.7128` - NYC) *(only for `geo` endpoint)*
+- `ADSB_LON` - Longitude for ADS-B data center point (default: `-74.0060` - NYC) *(only for `geo` endpoint)*
+- `ADSB_DISTANCE` - Radius in miles around center point (default: `15`) *(only for `geo` endpoint)*
 - `ADSB_API_URL` - ADS-B API base URL (default: `https://opendata.adsb.fi/api/v2`)
 - `SLEEP_INTERVAL` - Seconds between data polls (default: `3`)
 
@@ -59,6 +60,13 @@ docker run -d --name adsb-cot-converter \
 docker run -d --name adsb-cot-converter \
  -e ALT_LOWER="10000" \
  -e ALT_UPPER="45000" \
+ adsb-to-cot
+```
+
+### Military aircraft tracking (worldwide)
+```bash
+docker run -d --name adsb-cot-converter \
+ -e ADSB_ENDPOINT="mil" \
  adsb-to-cot
 ```
 
