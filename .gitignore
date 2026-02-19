@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Backend runtime data (SQLite DB + uploaded certs)
+backend/data/
+
+# Environment
+.env
+backend/.env
+
+# macOS
+.DS_Store

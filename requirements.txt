@@ -1,7 +1,0 @@
-pytak
-configparser
-asyncio
-cryptography
-aiohttp
-aircot
-# xml.etree.ElementTree
