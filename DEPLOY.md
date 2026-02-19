@@ -94,11 +94,11 @@ cd ~/tak-manager
 
 ```bash
 # Download the production compose file from the repo
-curl -fsSL https://raw.githubusercontent.com/sheldon-st/tak-server-data/main/docker-compose.yml \
+curl -fsSL https://raw.githubusercontent.com/sheldon-st/takdata/main/docker-compose.yml \
      -o docker-compose.yml
 
 # Download the env template and fill in your values
-curl -fsSL https://raw.githubusercontent.com/sheldon-st/tak-server-data/main/.env.example \
+curl -fsSL https://raw.githubusercontent.com/sheldon-st/takdata/main/.env.example \
      -o .env
 ```
 

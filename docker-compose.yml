@@ -14,23 +14,29 @@ services:
       - DATA_DIR=/app/data
       - CORS_ORIGINS=${CORS_ORIGINS:-["*"]}
     networks:
-      - tak-net
+      - caddy
+      - takdata
+    labels:
+      caddy: api.data.opengeo.space
+      caddy.reverse_proxy: "{{upstreams 8000}}"
     # Backend is NOT exposed on the host — all traffic flows through the frontend nginx
 
-  frontend:
-    image: ghcr.io/sheldon-st/takdata-frontend:latest
-    container_name: tak-manager-frontend
-    restart: unless-stopped
-    ports:
-      - "${HOST_PORT:-80}:80"
-    networks:
-      - tak-net
-    depends_on:
-      - backend
+  # frontend:
+  #   image: ghcr.io/sheldon-st/takdata-frontend:latest
+  #   container_name: tak-manager-frontend
+  #   restart: unless-stopped
+  #   ports:
+  #     - "${HOST_PORT:-80}:80"
+  #   networks:
+  #     - tak-net
+  #   depends_on:
+  #     - backend
 
 volumes:
   tak-data:
 
 networks:
-  tak-net:
-    driver: bridge
+  caddy:
+    external: true
+  takdata:
+    external: true
