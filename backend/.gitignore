@@ -1,0 +1,15 @@
+# Runtime data (SQLite DB + uploaded certs)
+data/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
