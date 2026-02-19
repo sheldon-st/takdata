@@ -68,19 +68,31 @@ def delete_cert(certs_dir: Path, cert_id: str) -> bool:
 
 def resolve_cert_path(certs_dir: Path, cert_path_or_id: str) -> Optional[str]:
     """
-    Resolve a cert reference (cert_id or relative path) to an absolute path
-    suitable for passing to pytak.
+    Resolve a cert reference (cert_id or path) to an absolute path suitable for pytak.
+
+    Handles:
+    - Plain cert_id:  "50576b7f4af14caa"
+    - Path-like:      "data/certs/50576b7f4af14caa"  (stem extracted as cert_id)
+    - Absolute path:  "/absolute/path/to/cert.p12"
+
     Returns None if not found.
     """
     if not cert_path_or_id:
         return None
 
-    # Try as cert_id first
+    # Try as cert_id directly
     p = cert_path_for_id(certs_dir, cert_path_or_id)
     if p:
         return str(p.resolve())
 
-    # Try as a direct path
+    # Try extracting just the filename stem — handles "data/certs/{cert_id}" stored values
+    stem = Path(cert_path_or_id).stem
+    if stem and stem != cert_path_or_id:
+        p = cert_path_for_id(certs_dir, stem)
+        if p:
+            return str(p.resolve())
+
+    # Try as a direct path (absolute or relative to CWD)
     direct = Path(cert_path_or_id)
     if direct.exists():
         return str(direct.resolve())

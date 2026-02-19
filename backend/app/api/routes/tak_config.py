@@ -15,8 +15,10 @@ import aiosqlite
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.deps import get_db, get_runtime
+from app.core.config import settings
 from app.core.runtime_manager import RuntimeManager
 from app.models.schemas import TakConfigResponse, TakConfigUpdate, TakStatusResponse
+from app.services.cert_service import resolve_cert_path
 from app.services.enablement_service import get_tak_config, update_tak_config
 
 log = logging.getLogger(__name__)
@@ -49,6 +51,18 @@ async def connect_tak(
     tak_cfg = await get_tak_config(db)
     if not tak_cfg.get("cot_url"):
         raise HTTPException(status_code=400, detail="TAK server URL not configured")
+
+    # Resolve cert_id / path to an absolute filesystem path before passing to pytak
+    cert_ref = tak_cfg.get("cert_path")
+    if cert_ref:
+        resolved = resolve_cert_path(settings.certs_dir, cert_ref)
+        if not resolved:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Certificate not found: {cert_ref}",
+            )
+        tak_cfg = dict(tak_cfg)
+        tak_cfg["cert_path"] = resolved
 
     try:
         await runtime.connect_tak(tak_cfg)

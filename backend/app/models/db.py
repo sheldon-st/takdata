@@ -35,16 +35,20 @@ CREATE TABLE IF NOT EXISTS tak_config (
 );
 
 CREATE TABLE IF NOT EXISTS enablements (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    type_id     TEXT    NOT NULL,
-    name        TEXT    NOT NULL,
-    enabled     INTEGER NOT NULL DEFAULT 1,
-    cot_stale   INTEGER NOT NULL DEFAULT 300,
-    alt_upper   INTEGER NOT NULL DEFAULT 0,
-    alt_lower   INTEGER NOT NULL DEFAULT 0,
-    uid_key     TEXT    NOT NULL DEFAULT 'ICAO',
-    created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
-    updated_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    type_id             TEXT    NOT NULL,
+    name                TEXT    NOT NULL,
+    enabled             INTEGER NOT NULL DEFAULT 1,
+    cot_stale           INTEGER NOT NULL DEFAULT 300,
+    alt_upper           INTEGER NOT NULL DEFAULT 0,
+    alt_lower           INTEGER NOT NULL DEFAULT 0,
+    uid_key             TEXT    NOT NULL DEFAULT 'ICAO',
+    geo_filter_min_lat  REAL,
+    geo_filter_max_lat  REAL,
+    geo_filter_min_lon  REAL,
+    geo_filter_max_lon  REAL,
+    created_at          TEXT    NOT NULL DEFAULT (datetime('now')),
+    updated_at          TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS sources (
@@ -63,6 +67,14 @@ CREATE TABLE IF NOT EXISTS sources (
 """
 
 
+_GEO_FILTER_MIGRATIONS = [
+    "ALTER TABLE enablements ADD COLUMN geo_filter_min_lat REAL",
+    "ALTER TABLE enablements ADD COLUMN geo_filter_max_lat REAL",
+    "ALTER TABLE enablements ADD COLUMN geo_filter_min_lon REAL",
+    "ALTER TABLE enablements ADD COLUMN geo_filter_max_lon REAL",
+]
+
+
 async def init_db(db_path: Optional[Path] = None) -> None:
     """Create tables and seed default TAK config row. Called from app lifespan."""
     path = db_path or DB_PATH
@@ -70,6 +82,12 @@ async def init_db(db_path: Optional[Path] = None) -> None:
     async with aiosqlite.connect(path) as db:
         await db.executescript(SCHEMA_SQL)
         await db.execute("INSERT OR IGNORE INTO tak_config (id) VALUES (1)")
+        # Migrate existing databases that predate the geo-filter columns.
+        for stmt in _GEO_FILTER_MIGRATIONS:
+            try:
+                await db.execute(stmt)
+            except Exception:
+                pass  # Column already exists — safe to ignore
         await db.commit()
     log.info("Database initialised at %s", path)
 

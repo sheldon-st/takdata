@@ -61,8 +61,12 @@ async def get_enablement(db: aiosqlite.Connection, enablement_id: int) -> Option
 
 async def create_enablement(db: aiosqlite.Connection, data: dict) -> dict:
     cursor = await db.execute(
-        """INSERT INTO enablements (type_id, name, enabled, cot_stale, alt_upper, alt_lower, uid_key)
-           VALUES (:type_id, :name, :enabled, :cot_stale, :alt_upper, :alt_lower, :uid_key)""",
+        """INSERT INTO enablements
+               (type_id, name, enabled, cot_stale, alt_upper, alt_lower, uid_key,
+                geo_filter_min_lat, geo_filter_max_lat, geo_filter_min_lon, geo_filter_max_lon)
+           VALUES
+               (:type_id, :name, :enabled, :cot_stale, :alt_upper, :alt_lower, :uid_key,
+                :geo_filter_min_lat, :geo_filter_max_lat, :geo_filter_min_lon, :geo_filter_max_lon)""",
         data,
     )
     await db.commit()
@@ -173,7 +177,7 @@ def build_enablement_config(enablement: dict) -> dict:
     Merge the enablement row fields into a flat config dict that
     plugins and converters expect (uppercase keys for CoT fields).
     """
-    return {
+    cfg = {
         **enablement,
         "COT_STALE": str(enablement.get("cot_stale", 300)),
         "UID_KEY": enablement.get("uid_key", "ICAO"),
@@ -187,6 +191,12 @@ def build_enablement_config(enablement: dict) -> dict:
         ),
         "sources": enablement.get("sources", []),
     }
+    # Geo bounding-box filter — pass raw values (None disables the filter)
+    cfg["geo_filter_min_lat"] = enablement.get("geo_filter_min_lat")
+    cfg["geo_filter_max_lat"] = enablement.get("geo_filter_max_lat")
+    cfg["geo_filter_min_lon"] = enablement.get("geo_filter_min_lon")
+    cfg["geo_filter_max_lon"] = enablement.get("geo_filter_max_lon")
+    return cfg
 
 
 # ---------------------------------------------------------------------------
@@ -216,6 +226,19 @@ async def restore_active_enablements(
         if not tak_cfg.get("cot_url"):
             log.info("TAK URL not set — skipping startup restore")
             return
+
+        # Resolve cert reference to absolute path
+        from app.core.config import settings as _settings
+        from app.services.cert_service import resolve_cert_path as _resolve_cert_path
+
+        cert_ref = tak_cfg.get("cert_path")
+        if cert_ref:
+            resolved = _resolve_cert_path(_settings.certs_dir, cert_ref)
+            if resolved:
+                tak_cfg["cert_path"] = resolved
+            else:
+                log.warning("Startup: cert not found for ref %r, connecting without cert", cert_ref)
+                tak_cfg["cert_path"] = ""
 
         try:
             await runtime.connect_tak(tak_cfg)

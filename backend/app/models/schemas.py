@@ -103,6 +103,10 @@ class EnablementCreate(BaseModel):
     alt_upper: int = Field(0, description="Upper altitude filter in feet (0 = disabled)")
     alt_lower: int = Field(0, description="Lower altitude filter in feet (0 = disabled)")
     uid_key: str = Field("ICAO", description="UID key: ICAO, REG, or FLIGHT")
+    geo_filter_min_lat: Optional[float] = Field(None, description="Bounding box south latitude (-90 to 90); all four required to enable filter")
+    geo_filter_max_lat: Optional[float] = Field(None, description="Bounding box north latitude (-90 to 90)")
+    geo_filter_min_lon: Optional[float] = Field(None, description="Bounding box west longitude (-180 to 180)")
+    geo_filter_max_lon: Optional[float] = Field(None, description="Bounding box east longitude (-180 to 180)")
 
 
 class EnablementUpdate(BaseModel):
@@ -112,6 +116,10 @@ class EnablementUpdate(BaseModel):
     alt_upper: Optional[int] = None
     alt_lower: Optional[int] = None
     uid_key: Optional[str] = None
+    geo_filter_min_lat: Optional[float] = None
+    geo_filter_max_lat: Optional[float] = None
+    geo_filter_min_lon: Optional[float] = None
+    geo_filter_max_lon: Optional[float] = None
 
 
 class EnablementResponse(BaseModel):
@@ -123,6 +131,10 @@ class EnablementResponse(BaseModel):
     alt_upper: int
     alt_lower: int
     uid_key: str
+    geo_filter_min_lat: Optional[float]
+    geo_filter_max_lat: Optional[float]
+    geo_filter_min_lon: Optional[float]
+    geo_filter_max_lon: Optional[float]
     running: bool
     created_at: str
     updated_at: str

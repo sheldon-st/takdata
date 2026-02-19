@@ -47,6 +47,34 @@ class AdsbWorker:
             s["name"]: {"last_poll": None, "aircraft_count": 0}
             for s in sources
         }
+        self._geo_filter: Optional[tuple[float, float, float, float]] = self._parse_geo_filter()
+
+    def _parse_geo_filter(self) -> Optional[tuple[float, float, float, float]]:
+        """Return (min_lat, max_lat, min_lon, max_lon) if all four bounds are set, else None."""
+        vals = (
+            self.config.get("geo_filter_min_lat"),
+            self.config.get("geo_filter_max_lat"),
+            self.config.get("geo_filter_min_lon"),
+            self.config.get("geo_filter_max_lon"),
+        )
+        if all(v is not None for v in vals):
+            bbox = tuple(float(v) for v in vals)  # type: ignore[arg-type]
+            log.info(
+                "Geo filter active: lat [%s, %s], lon [%s, %s]",
+                bbox[0], bbox[1], bbox[2], bbox[3],
+            )
+            return bbox  # type: ignore[return-value]
+        return None
+
+    @staticmethod
+    def _in_bbox(ac: dict, bbox: tuple) -> bool:
+        """Return True if the aircraft position falls inside the bounding box."""
+        lat = ac.get("lat")
+        lon = ac.get("lon")
+        if lat is None or lon is None:
+            return False
+        min_lat, max_lat, min_lon, max_lon = bbox
+        return min_lat <= lat <= max_lat and min_lon <= lon <= max_lon
 
     def get_stats(self) -> EnablementStats:
         self._stats.source_stats = self._source_stats
@@ -124,6 +152,12 @@ class AdsbWorker:
                 ac = {**ac, **last_pos}
             if ac.get("lat") is not None and ac.get("lon") is not None:
                 with_location.append(ac)
+
+        # Apply geo bounding-box filter if configured
+        if self._geo_filter:
+            before = len(with_location)
+            with_location = [ac for ac in with_location if self._in_bbox(ac, self._geo_filter)]
+            log.debug("[%s] Geo filter: %d/%d aircraft in bbox", name, len(with_location), before)
 
         # Update source-level stats
         self._source_stats.setdefault(name, {})
