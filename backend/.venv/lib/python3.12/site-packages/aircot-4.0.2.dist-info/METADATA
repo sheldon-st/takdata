@@ -1,0 +1,58 @@
+Metadata-Version: 2.4
+Name: aircot
+Version: 4.0.2
+Summary: Software for classifying aircraft within TAK.
+Home-page: https://github.com/snstac/aircot
+Maintainer: Greg Albrecht
+Maintainer-email: oss@undef.net
+License: Apache-2.0
+Project-URL: CI: GitHub Actions, https://github.com/snstac/aircot/actions
+Project-URL: GitHub: issues, https://github.com/snstac/aircot/issues
+Project-URL: GitHub: repo, https://github.com/snstac/aircot
+Keywords: Cursor on Target,ATAK,WinTAK,TAK Server,ADS-B,Aircraft
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Intended Audience :: Developers
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Operating System :: POSIX
+Classifier: Operating System :: MacOS :: MacOS X
+Classifier: Operating System :: Microsoft :: Windows
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.7
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Provides-Extra: test
+Requires-Dist: pytest>=6.0; extra == "test"
+Requires-Dist: pytest-cov; extra == "test"
+Requires-Dist: pylint; extra == "test"
+Requires-Dist: flake8; extra == "test"
+Requires-Dist: black; extra == "test"
+Dynamic: license-file
+
+![ATAK screenshot with PyTAK logo.](https://aircot.readthedocs.io/en/latest/media/atak_screenshot_with_pytak_logo-x25.png)
+
+# Classify Aircraft in TAK
+
+AirCOT classifies aircraft within the Team Awareness Kit (TAK) ecosystem.
+
+## Used By
+
+- **[ADSBCOT](https://github.com/snstac/adsbcot)** - Monitors and analyzes aviation surveillance data via TAK
+- **[AirTAK](https://www.snstac.com/airtak)** - Low SWaP-C device for monitoring and analyzing aviation surveillance data via TAK
+
+## Documentation
+
+[Read the full documentation](https://aircot.rtfd.io)
+
+## Copyright & License
+
+Copyright Sensors & Signals LLC https://www.snstac.com
+
+Licensed under the Apache License, Version 2.0 (the "License").
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
+
+* [TAK-ADSB-ID](https://github.com/sgofferj/TAK-ADSB-ID) is licensed under the Attribution-ShareAlike 4.0 International license.
