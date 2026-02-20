@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # Import enablements package to populate the plugin registry
 import app.enablements  # noqa: F401
 
-from app.api.routes import certs, enablements, sources, status, tak_config
+from app.api.routes import certs, enablements, packages, sources, status, tak_config
 from app.core.config import settings
 from app.core.runtime_manager import runtime_manager
 from app.models.db import init_db
@@ -69,6 +69,7 @@ app.add_middleware(
 PREFIX = "/api/v1"
 app.include_router(tak_config.router, prefix=PREFIX)
 app.include_router(certs.router, prefix=PREFIX)
+app.include_router(packages.router, prefix=PREFIX)
 app.include_router(enablements.router, prefix=PREFIX)
 app.include_router(sources.router, prefix=PREFIX)
 app.include_router(status.router, prefix=PREFIX)

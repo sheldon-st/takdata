@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     def certs_dir(self) -> Path:
         return self.data_dir / "certs"
 
+    @property
+    def packages_dir(self) -> Path:
+        return self.data_dir / "packages"
+
     # CORS
     cors_origins: list[str] = ["*"]
 
