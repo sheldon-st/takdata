@@ -14,7 +14,7 @@ import logging
 import aiosqlite
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.api.deps import get_db, get_runtime
+from app.api.deps import get_db, get_runtime, require_admin, require_viewer
 from app.core.config import settings
 from app.core.runtime_manager import RuntimeManager
 from app.models.schemas import TakConfigResponse, TakConfigUpdate, TakStatusResponse
@@ -26,7 +26,10 @@ router = APIRouter(prefix="/tak", tags=["TAK Server"])
 
 
 @router.get("/config", response_model=TakConfigResponse)
-async def read_tak_config(db: aiosqlite.Connection = Depends(get_db)):
+async def read_tak_config(
+    db: aiosqlite.Connection = Depends(get_db),
+    _: dict = Depends(require_viewer),
+):
     return await get_tak_config(db)
 
 
@@ -34,6 +37,7 @@ async def read_tak_config(db: aiosqlite.Connection = Depends(get_db)):
 async def write_tak_config(
     body: TakConfigUpdate,
     db: aiosqlite.Connection = Depends(get_db),
+    _: dict = Depends(require_admin),
 ):
     data = body.model_dump(exclude_none=False)
     # Don't store cert_password if None was explicitly passed
@@ -46,6 +50,7 @@ async def write_tak_config(
 async def connect_tak(
     db: aiosqlite.Connection = Depends(get_db),
     runtime: RuntimeManager = Depends(get_runtime),
+    _: dict = Depends(require_admin),
 ):
     """Connect (or reconnect) to the TAK server using the stored config."""
     tak_cfg = await get_tak_config(db)
@@ -72,13 +77,19 @@ async def connect_tak(
 
 
 @router.post("/disconnect")
-async def disconnect_tak(runtime: RuntimeManager = Depends(get_runtime)):
+async def disconnect_tak(
+    runtime: RuntimeManager = Depends(get_runtime),
+    _: dict = Depends(require_admin),
+):
     await runtime.disconnect_tak()
     return {"status": "disconnected"}
 
 
 @router.get("/status", response_model=TakStatusResponse)
-async def tak_status(runtime: RuntimeManager = Depends(get_runtime)):
+async def tak_status(
+    runtime: RuntimeManager = Depends(get_runtime),
+    _: dict = Depends(require_viewer),
+):
     status = runtime.get_status()
     return {
         "connected": status["tak_connected"],

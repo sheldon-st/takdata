@@ -18,7 +18,7 @@ import logging
 import aiosqlite
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.api.deps import get_db, get_runtime
+from app.api.deps import get_db, get_runtime, require_admin, require_viewer
 from app.core.runtime_manager import RuntimeManager
 from app.enablements.registry import get_plugin_class, list_registered
 from app.models.schemas import (
@@ -45,7 +45,7 @@ router = APIRouter(tags=["Enablements"])
 # ---------------------------------------------------------------------------
 
 @router.get("/enablement-types", response_model=list[EnablementTypeInfo])
-async def get_enablement_types():
+async def get_enablement_types(_: dict = Depends(require_viewer)):
     """List all registered enablement plugin types."""
     return list_registered()
 
@@ -58,6 +58,7 @@ async def get_enablement_types():
 async def get_enablements(
     db: aiosqlite.Connection = Depends(get_db),
     runtime: RuntimeManager = Depends(get_runtime),
+    _: dict = Depends(require_viewer),
 ):
     rows = await list_enablements(db)
     return [_enrich(e, runtime) for e in rows]
@@ -68,6 +69,7 @@ async def post_enablement(
     body: EnablementCreate,
     db: aiosqlite.Connection = Depends(get_db),
     runtime: RuntimeManager = Depends(get_runtime),
+    _: dict = Depends(require_admin),
 ):
     # Validate type_id is registered
     try:
@@ -84,6 +86,7 @@ async def get_one_enablement(
     enablement_id: int,
     db: aiosqlite.Connection = Depends(get_db),
     runtime: RuntimeManager = Depends(get_runtime),
+    _: dict = Depends(require_viewer),
 ):
     row = await get_enablement(db, enablement_id)
     if not row:
@@ -97,6 +100,7 @@ async def put_enablement(
     body: EnablementUpdate,
     db: aiosqlite.Connection = Depends(get_db),
     runtime: RuntimeManager = Depends(get_runtime),
+    _: dict = Depends(require_admin),
 ):
     row = await get_enablement(db, enablement_id)
     if not row:
@@ -118,6 +122,7 @@ async def del_enablement(
     enablement_id: int,
     db: aiosqlite.Connection = Depends(get_db),
     runtime: RuntimeManager = Depends(get_runtime),
+    _: dict = Depends(require_admin),
 ):
     await runtime.stop_enablement(enablement_id)
     deleted = await delete_enablement(db, enablement_id)
@@ -134,6 +139,7 @@ async def start_enablement(
     enablement_id: int,
     db: aiosqlite.Connection = Depends(get_db),
     runtime: RuntimeManager = Depends(get_runtime),
+    _: dict = Depends(require_admin),
 ):
     row = await get_enablement(db, enablement_id)
     if not row:
@@ -161,6 +167,7 @@ async def stop_enablement(
     enablement_id: int,
     db: aiosqlite.Connection = Depends(get_db),
     runtime: RuntimeManager = Depends(get_runtime),
+    _: dict = Depends(require_admin),
 ):
     row = await get_enablement(db, enablement_id)
     if not row:
@@ -179,6 +186,7 @@ async def stop_enablement(
 async def known_sources(
     enablement_id: int,
     db: aiosqlite.Connection = Depends(get_db),
+    _: dict = Depends(require_viewer),
 ):
     row = await get_enablement(db, enablement_id)
     if not row:

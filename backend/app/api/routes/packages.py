@@ -10,9 +10,10 @@ Routes:
 
 import logging
 
-from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
+from app.api.deps import require_admin, require_viewer
 from app.core.config import settings
 from app.services.package_service import (
     delete_package,
@@ -28,12 +29,15 @@ _MAX_PACKAGE_SIZE = 100 * 1024 * 1024  # 100 MB
 
 
 @router.get("", response_model=list[dict])
-async def get_packages():
+async def get_packages(_: dict = Depends(require_viewer)):
     return list_packages(settings.packages_dir)
 
 
 @router.post("", response_model=dict, status_code=201)
-async def upload_package(file: UploadFile):
+async def upload_package(
+    file: UploadFile,
+    _: dict = Depends(require_admin),
+):
     if not file.filename or not file.filename.endswith(".zip"):
         raise HTTPException(status_code=400, detail="Only .zip files are accepted")
 
@@ -47,7 +51,7 @@ async def upload_package(file: UploadFile):
 
 
 @router.get("/{package_id}")
-async def download_package(package_id: str):
+async def download_package(package_id: str, _: dict = Depends(require_viewer)):
     path = package_path_for_id(settings.packages_dir, package_id)
     if not path or not path.exists():
         raise HTTPException(status_code=404, detail="Package not found")
@@ -64,6 +68,6 @@ async def download_package(package_id: str):
 
 
 @router.delete("/{package_id}", status_code=204)
-async def remove_package(package_id: str):
+async def remove_package(package_id: str, _: dict = Depends(require_admin)):
     if not delete_package(settings.packages_dir, package_id):
         raise HTTPException(status_code=404, detail="Package not found")

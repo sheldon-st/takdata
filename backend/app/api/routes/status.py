@@ -11,7 +11,7 @@ import logging
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
-from app.api.deps import get_runtime
+from app.api.deps import get_runtime, require_viewer
 from app.core.runtime_manager import RuntimeManager
 from app.models.schemas import StatusResponse
 
@@ -20,7 +20,10 @@ router = APIRouter(tags=["Status"])
 
 
 @router.get("/status", response_model=StatusResponse)
-async def get_status(runtime: RuntimeManager = Depends(get_runtime)):
+async def get_status(
+    runtime: RuntimeManager = Depends(get_runtime),
+    _: dict = Depends(require_viewer),
+):
     return runtime.get_status()
 
 
@@ -28,6 +31,7 @@ async def get_status(runtime: RuntimeManager = Depends(get_runtime)):
 async def ws_status(
     websocket: WebSocket,
     runtime: RuntimeManager = Depends(get_runtime),
+    _: dict = Depends(require_viewer),
 ):
     await websocket.accept()
     log.debug("WebSocket client connected: %s", websocket.client)

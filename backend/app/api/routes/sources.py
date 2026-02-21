@@ -13,7 +13,7 @@ import logging
 import aiosqlite
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.api.deps import get_db, get_runtime
+from app.api.deps import get_db, get_runtime, require_admin, require_viewer
 from app.core.runtime_manager import RuntimeManager
 from app.models.schemas import SourceCreate, SourceResponse, SourceUpdate
 from app.services.enablement_service import (
@@ -34,6 +34,7 @@ router = APIRouter(tags=["Sources"])
 async def get_sources(
     enablement_id: int,
     db: aiosqlite.Connection = Depends(get_db),
+    _: dict = Depends(require_viewer),
 ):
     await _require_enablement(db, enablement_id)
     return await list_sources(db, enablement_id)
@@ -49,6 +50,7 @@ async def add_source(
     body: SourceCreate,
     db: aiosqlite.Connection = Depends(get_db),
     runtime: RuntimeManager = Depends(get_runtime),
+    _: dict = Depends(require_admin),
 ):
     await _require_enablement(db, enablement_id)
     data = body.model_dump()
@@ -69,6 +71,7 @@ async def edit_source(
     body: SourceUpdate,
     db: aiosqlite.Connection = Depends(get_db),
     runtime: RuntimeManager = Depends(get_runtime),
+    _: dict = Depends(require_admin),
 ):
     await _require_source(db, enablement_id, source_id)
     updates = body.model_dump(exclude_none=True)
@@ -84,6 +87,7 @@ async def remove_source(
     source_id: int,
     db: aiosqlite.Connection = Depends(get_db),
     runtime: RuntimeManager = Depends(get_runtime),
+    _: dict = Depends(require_admin),
 ):
     await _require_source(db, enablement_id, source_id)
     await delete_source(db, enablement_id, source_id)
