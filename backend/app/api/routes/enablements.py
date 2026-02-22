@@ -139,7 +139,7 @@ async def start_enablement(
     enablement_id: int,
     db: aiosqlite.Connection = Depends(get_db),
     runtime: RuntimeManager = Depends(get_runtime),
-    _: dict = Depends(require_admin),
+    _: dict = Depends(require_viewer),
 ):
     row = await get_enablement(db, enablement_id)
     if not row:
@@ -167,7 +167,7 @@ async def stop_enablement(
     enablement_id: int,
     db: aiosqlite.Connection = Depends(get_db),
     runtime: RuntimeManager = Depends(get_runtime),
-    _: dict = Depends(require_admin),
+    _: dict = Depends(require_viewer),
 ):
     row = await get_enablement(db, enablement_id)
     if not row:
