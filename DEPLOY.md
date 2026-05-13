@@ -1,153 +1,131 @@
 # TAK Manager — VPS Deployment Guide
 
-This guide covers deploying TAK Manager (backend API + frontend) on a VPS using
-pre-built Docker images from GitHub Container Registry (GHCR).
+Deploy TAK Manager (backend API + frontend) on a VPS using pre-built Docker
+images from GitHub Container Registry (GHCR), behind the host nginx managed
+by [`vps-infra`](../vps-infra).
 
 ---
 
 ## Architecture on the VPS
 
 ```
-Internet
+Internet :80 / :443
   │
-  ▼  port 80 (or 443 with SSL)
-┌──────────────────────────────┐
-│  frontend container (nginx)  │
-│  • serves React static files │
-│  • proxies /api/* → backend  │
-│  • proxies /api/v1/ws/* → WS │
-└──────────────┬───────────────┘
-               │  Docker network: tak-net
-               ▼  port 8000 (internal only)
-┌──────────────────────────────┐
-│  backend container (FastAPI) │
-│  • REST API                  │
-│  • WebSocket live status     │
-│  • SQLite + uploaded certs   │
-└──────────────────────────────┘
+  ▼
+┌──────────────────────────────────────────────┐
+│ host nginx  (managed by vps-infra)           │
+│ • TLS termination (Let's Encrypt / certbot)  │
+│ • routes by Host header                      │
+└────────┬─────────────────────┬───────────────┘
+         │ 127.0.0.1:3000      │ 127.0.0.1:8000
+         ▼                     ▼
+  data.opengeo.space     api.data.opengeo.space
+┌──────────────────────┐ ┌──────────────────────┐
+│ frontend (Next.js)   │ │ backend (FastAPI)    │
+│ • SSR + static       │ │ • REST + WebSocket   │
+└──────────────────────┘ │ • SQLite + certs     │
+                         └──────────────────────┘
 ```
 
-The backend is **never exposed directly** to the host — all traffic flows through
-the frontend nginx container.
+Containers bind only to `127.0.0.1`. Nginx fronts them and handles TLS.
+The SPA calls the backend cross-origin at `api.data.opengeo.space`; CORS
+on the backend allows `https://data.opengeo.space`.
 
 ---
 
 ## Prerequisites
 
-- A VPS running Ubuntu 22.04 / Debian 12 (or similar). ARM64 (e.g. Oracle Cloud
-  free tier) and AMD64 both work — images are multi-arch.
-- A domain name pointing to your VPS IP (optional but recommended for SSL).
-- SSH access with `sudo`.
+- VPS running Ubuntu 22.04+/Debian 12+ (AMD64 or ARM64 — images are multi-arch).
+- DNS A records:
+  - `data.opengeo.space` → VPS IP
+  - `api.data.opengeo.space` → VPS IP
+- `vps-infra` deployed (nginx, firewall, systemd). See `../vps-infra/README.md`.
+- Docker installed.
 
 ---
 
-## Step 1 — Install Docker on the VPS
+## Step 1 — Install Docker
 
 ```bash
-# One-liner install for Ubuntu/Debian
 curl -fsSL https://get.docker.com | sh
-
-# Add your user to the docker group (re-login after)
 sudo usermod -aG docker $USER
 newgrp docker
-
-# Verify
-docker --version
-docker compose version
+docker --version && docker compose version
 ```
 
 ---
 
 ## Step 2 — Make GHCR images accessible
 
-Images are published to GitHub Container Registry (`ghcr.io`). By default they
-are **private**. You have two options:
+Images are at `ghcr.io/sheldon-st/takdata` and `ghcr.io/sheldon-st/takdata-frontend`.
+Either make the packages public (recommended) or `docker login ghcr.io` with a
+PAT having `read:packages`.
 
-### Option A — Make packages public (recommended, no auth needed on VPS)
+---
 
-1. Go to `https://github.com/sheldon-st?tab=packages`
-2. Click the **takdata** package → **Package settings** → scroll to **Danger Zone** → **Change visibility** → Public
-3. Repeat for **takdata-frontend** once it is published
+## Step 3 — Issue TLS certificates
 
-### Option B — Authenticate on the VPS with a Personal Access Token
+Nginx config in `vps-infra/nginx/nginx.conf` expects certs at:
 
-1. On GitHub: **Settings → Developer settings → Personal access tokens → Tokens (classic)**
-2. Generate a token with `read:packages` scope
-3. On the VPS:
+- `/etc/letsencrypt/live/data.opengeo.space/`
+- `/etc/letsencrypt/live/api.data.opengeo.space/`
+
+Issue them with certbot (the nginx `:80` server blocks serve the
+`/.well-known/acme-challenge/` path from `/var/www/certbot`):
 
 ```bash
-echo "<YOUR_PAT>" | docker login ghcr.io -u <your-github-username> --password-stdin
+sudo apt install -y certbot
+sudo mkdir -p /var/www/certbot
+
+sudo certbot certonly --webroot -w /var/www/certbot \
+  -d data.opengeo.space \
+  -d api.data.opengeo.space
+```
+
+Then reload nginx:
+
+```bash
+sudo systemctl reload nginx
 ```
 
 ---
 
-## Step 3 — Create a deployment directory
+## Step 4 — Deploy the stack
 
 ```bash
-mkdir -p ~/tak-manager
-cd ~/tak-manager
-```
+mkdir -p ~/tak-manager && cd ~/tak-manager
 
----
-
-## Step 4 — Download the compose file and configure environment
-
-```bash
-# Download the production compose file from the repo
-curl -fsSL https://raw.githubusercontent.com/sheldon-st/takdata/main/docker-compose.yml \
-     -o docker-compose.yml
-
-# Download the env template and fill in your values
-curl -fsSL https://raw.githubusercontent.com/sheldon-st/takdata/main/.env.example \
-     -o .env
-```
-
-Edit `.env`:
-
-```bash
+curl -fsSL https://raw.githubusercontent.com/sheldon-st/takdata/main/docker-compose.yml -o docker-compose.yml
+curl -fsSL https://raw.githubusercontent.com/sheldon-st/takdata/main/.env.example -o .env
 nano .env
 ```
 
-Minimum required changes:
-
 | Variable | Default | Notes |
 |----------|---------|-------|
-| `HOST_PORT` | `80` | Change to `443` only if terminating TLS here |
-| `LOG_LEVEL` | `INFO` | Change to `DEBUG` if troubleshooting |
-| `CORS_ORIGINS` | `["*"]` | Tighten to `["https://your-domain.com"]` in production |
+| `LOG_LEVEL` | `INFO` | `DEBUG` for troubleshooting |
+| `CORS_ORIGINS` | `["https://data.opengeo.space"]` | Frontend origin |
 
----
-
-## Step 5 — Pull images and start
+Pull and start:
 
 ```bash
 docker compose pull
 docker compose up -d
-```
-
-Verify containers are running:
-
-```bash
 docker compose ps
-docker compose logs -f
 ```
 
-The app is now available at `http://<your-vps-ip>/`.
+Backend listens on `127.0.0.1:8000`; frontend on `127.0.0.1:3000`. Host nginx
+proxies the public domains to them.
 
 ---
 
-## Step 6 — Open the firewall
+## Step 5 — Firewall
 
-```bash
-# UFW (Ubuntu)
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp   # only if using SSL
-sudo ufw reload
-```
+Already opened by `vps-infra/firewall/setup-ufw.sh` (ports 80, 443). No extra
+ports needed — container ports are not exposed publicly.
 
 ---
 
-## Updating to a new release
+## Updating
 
 ```bash
 cd ~/tak-manager
@@ -155,90 +133,28 @@ docker compose pull
 docker compose up -d
 ```
 
-Docker Compose will restart only the containers whose images have changed. The
-`tak-data` volume (SQLite DB + uploaded certs) is preserved across updates.
+Only changed images restart. `tak-data` volume (SQLite + certs) is preserved.
 
 ---
 
-## Viewing logs
+## Logs
 
 ```bash
-# All containers
-docker compose logs -f
-
-# Backend only
-docker compose logs -f backend
-
-# Frontend nginx only
-docker compose logs -f frontend
-```
-
----
-
-## Optional — Automatic HTTPS with Caddy
-
-[Caddy](https://caddyserver.com) is the simplest way to add automatic Let's
-Encrypt TLS in front of the stack. It handles cert issuance and renewal
-automatically.
-
-### 1. Create `Caddyfile`
-
-```
-# ~/tak-manager/Caddyfile
-your-domain.com {
-    reverse_proxy frontend:80
-}
-```
-
-Replace `your-domain.com` with your actual domain. Caddy will obtain a
-certificate automatically on first start (port 80 and 443 must be reachable).
-
-### 2. Create `docker-compose.caddy.yml`
-
-```yaml
-services:
-  caddy:
-    image: caddy:2-alpine
-    container_name: tak-manager-caddy
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"   # HTTP/3
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - caddy-data:/data
-      - caddy-config:/config
-    networks:
-      - tak-net
-
-volumes:
-  caddy-data:
-  caddy-config:
-```
-
-### 3. Update `.env` to stop the frontend from binding port 80 directly
-
-```env
-HOST_PORT=   # leave empty — Caddy takes port 80/443
-```
-
-### 4. Start with both compose files
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.caddy.yml up -d
+docker compose logs -f          # all
+docker compose logs -f backend  # API
+docker compose logs -f frontend # Next.js
 ```
 
 ---
 
 ## Data persistence
 
-All persistent data lives in the **`tak-data` Docker named volume**:
+All state lives in the `tak-data` named volume:
 
-- `config.db` — SQLite database (TAK config, enablements, sources)
-- `certs/` — uploaded `.p12` client certificates
+- `config.db` — SQLite (config, enablements, sources)
+- `certs/` — uploaded `.p12` client certs
 
-To back it up:
+Backup:
 
 ```bash
 docker run --rm \
@@ -247,7 +163,7 @@ docker run --rm \
   alpine tar czf /backup/tak-data-backup.tar.gz /data
 ```
 
-To restore from backup:
+Restore:
 
 ```bash
 docker run --rm \
@@ -258,49 +174,30 @@ docker run --rm \
 
 ---
 
-## CI/CD flow summary
+## CI/CD
 
 ```
-git push to main
-      │
-      ▼
-GitHub Actions (.github/workflows/docker-image.yml)
-  ├── Build backend  → ghcr.io/sheldon-st/takdata:latest
-  └── Build frontend → ghcr.io/sheldon-st/takdata-frontend:latest
-           (skipped until frontend/package.json exists)
-                │
-                ▼
-         docker compose pull   (on VPS)
-         docker compose up -d
+git push main
+  └── GitHub Actions builds:
+       ├── ghcr.io/sheldon-st/takdata:latest
+       └── ghcr.io/sheldon-st/takdata-frontend:latest
+            └── on VPS: docker compose pull && docker compose up -d
 ```
 
-Images are tagged with both `:latest` and `:sha-<commit>`. The compose file
-always pulls `:latest`. To pin to a specific commit, edit `docker-compose.yml`
-and replace `:latest` with the desired SHA tag.
+Tags: `:latest` and `:sha-<commit>`. Pin by editing `docker-compose.yml`.
 
 ---
 
 ## Troubleshooting
 
-**Backend fails to start**
-```bash
-docker compose logs backend
-```
-Common causes: volume permission issues, corrupt SQLite DB.
+**Backend won't start** — `docker compose logs backend`. Usually volume perms or corrupt SQLite.
 
-**Frontend shows blank page / 404 on refresh**
-Nginx is not serving `index.html` as fallback. Verify [frontend/nginx.conf](frontend/nginx.conf)
-has the `try_files $uri $uri/ /index.html;` directive.
+**Frontend blank / 404 on refresh** — Next standalone serves SPA fallback. Check `docker compose logs frontend`.
 
-**WebSocket shows "Reconnecting..."**
-- Check that port 80 is open on the VPS firewall
-- Verify `/api/v1/ws/` location block in nginx.conf is above the `/api/` block
-- Check backend logs for errors
+**WebSocket "Reconnecting..."** — confirm nginx WS upgrade headers in `vps-infra/nginx/nginx.conf` `api.data.opengeo.space` block (`Upgrade`/`Connection`). Check backend logs.
 
-**Cannot pull image (403 Forbidden)**
-The GHCR package is private. Follow Step 2 to make it public or authenticate
-with a PAT.
+**502 from nginx** — container not running or not bound to `127.0.0.1:<port>`. `docker compose ps` + `ss -tlnp | grep -E '3000|8000'`.
 
-**Port 80 already in use**
-Another process is using port 80 (e.g. Apache). Either stop it or set
-`HOST_PORT=8080` in `.env` and access the app on that port.
+**Cert error** — re-run certbot (Step 3). Auto-renew: `sudo systemctl status certbot.timer`.
+
+**Cannot pull image (403)** — package private. Make public or `docker login ghcr.io`.

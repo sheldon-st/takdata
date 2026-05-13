@@ -2,15 +2,52 @@
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
 .venv/
 venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
 
 # Backend runtime data (SQLite DB + uploaded certs)
 backend/data/
+backend/certs/
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
 
 # Environment
 .env
+.env.*
+!.env.example
 backend/.env
 
-# macOS
+# Node / frontend (local builds)
+node_modules/
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# Logs
+*.log
+logs/
+
+# Docker / deploy artifacts
+*.tar
+*.tar.gz
+docker-compose.override.yml
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
 .DS_Store
+Thumbs.db

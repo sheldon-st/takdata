@@ -1,42 +1,43 @@
-# Production deployment — uses pre-built images from GitHub Container Registry.
-# Run on VPS: docker compose pull && docker compose up -d
-# See DEPLOY.md for full setup instructions.
+# Production deployment — pre-built images from GitHub Container Registry.
+# TLS termination + routing handled by host nginx (see vps-infra/nginx/nginx.conf).
+# Containers bind to 127.0.0.1 only; nginx proxies from public 443.
+#
+# Run: docker compose pull && docker compose up -d
 
 services:
   backend:
     image: ghcr.io/sheldon-st/takdata:latest
-    container_name: tak-manager-backend
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
     volumes:
       - tak-data:/app/data
     environment:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - DATA_DIR=/app/data
-      - CORS_ORIGINS=${CORS_ORIGINS:-["*"]}
+      - CORS_ORIGINS=${CORS_ORIGINS:-["https://data.opengeo.space"]}
     networks:
-      - caddy
       - takdata
-    labels:
-      caddy: api.data.opengeo.space
-      caddy.reverse_proxy: "{{upstreams 8000}}"
-    # Backend is NOT exposed on the host — all traffic flows through the frontend nginx
 
-  # frontend:
-  #   image: ghcr.io/sheldon-st/takdata-frontend:latest
-  #   container_name: tak-manager-frontend
-  #   restart: unless-stopped
-  #   ports:
-  #     - "${HOST_PORT:-80}:80"
-  #   networks:
-  #     - tak-net
-  #   depends_on:
-  #     - backend
+  frontend:
+    image: ghcr.io/sheldon-st/takdata-frontend:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks:
+      - takdata
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      - backend
 
 volumes:
   tak-data:
 
 networks:
-  caddy:
-    external: true
   takdata:
-    external: true
+    driver: bridge
