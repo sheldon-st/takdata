@@ -1,8 +1,8 @@
 # TAK Manager — VPS Deployment Guide
 
 Deploy TAK Manager (backend API + frontend) on a VPS using pre-built Docker
-images from GitHub Container Registry (GHCR), behind the host nginx managed
-by [`vps-infra`](../vps-infra).
+images from GitHub Container Registry (GHCR), behind Traefik (Dokploy) with
+single-host path routing.
 
 ---
 
@@ -13,13 +13,12 @@ Internet :80 / :443
   │
   ▼
 ┌──────────────────────────────────────────────┐
-│ host nginx  (managed by vps-infra)           │
-│ • TLS termination (Let's Encrypt / certbot)  │
-│ • routes by Host header                      │
+│ Traefik (Dokploy)                            │
+│ • TLS termination (Let's Encrypt)            │
+│ • routes by Host + PathPrefix                │
 └────────┬─────────────────────┬───────────────┘
-         │ 127.0.0.1:3000      │ 127.0.0.1:8000
+         │ Host(data...)       │ Host(data...) && PathPrefix(/api)
          ▼                     ▼
-  data.opengeo.space     api.data.opengeo.space
 ┌──────────────────────┐ ┌──────────────────────┐
 │ frontend (Next.js)   │ │ backend (FastAPI)    │
 │ • SSR + static       │ │ • REST + WebSocket   │
@@ -27,19 +26,17 @@ Internet :80 / :443
                          └──────────────────────┘
 ```
 
-Containers bind only to `127.0.0.1`. Nginx fronts them and handles TLS.
-The SPA calls the backend cross-origin at `api.data.opengeo.space`; CORS
-on the backend allows `https://data.opengeo.space`.
+Both services are exposed behind `https://data.opengeo.space`. Traefik routes
+`/api` requests to the backend and everything else to the frontend.
 
 ---
 
 ## Prerequisites
 
 - VPS running Ubuntu 22.04+/Debian 12+ (AMD64 or ARM64 — images are multi-arch).
-- DNS A records:
+- DNS A record:
   - `data.opengeo.space` → VPS IP
-  - `api.data.opengeo.space` → VPS IP
-- `vps-infra` deployed (nginx, firewall, systemd). See `../vps-infra/README.md`.
+- Dokploy + Traefik deployed and handling `web`/`websecure` entrypoints.
 - Docker installed.
 
 ---
@@ -63,30 +60,21 @@ PAT having `read:packages`.
 
 ---
 
-## Step 3 — Issue TLS certificates
+## Step 3 — Configure Traefik routers (single host path split)
 
-Nginx config in `vps-infra/nginx/nginx.conf` expects certs at:
+Create two routers in Dokploy:
 
-- `/etc/letsencrypt/live/data.opengeo.space/`
-- `/etc/letsencrypt/live/api.data.opengeo.space/`
+- Frontend router:
+  - Rule: `Host(\`data.opengeo.space\`)`
+  - Service port: `3000`
+  - Middleware: `authentik-fwd@docker`
+- Backend router:
+  - Rule: `Host(\`data.opengeo.space\`) && PathPrefix(\`/api\`)`
+  - Service port: `8000`
+  - Middleware: `authentik-fwd@docker`
+  - Priority: higher than frontend (for example `100`)
 
-Issue them with certbot (the nginx `:80` server blocks serve the
-`/.well-known/acme-challenge/` path from `/var/www/certbot`):
-
-```bash
-sudo apt install -y certbot
-sudo mkdir -p /var/www/certbot
-
-sudo certbot certonly --webroot -w /var/www/certbot \
-  -d data.opengeo.space \
-  -d api.data.opengeo.space
-```
-
-Then reload nginx:
-
-```bash
-sudo systemctl reload nginx
-```
+Traefik's Let's Encrypt resolver on `websecure` handles certificates.
 
 ---
 
@@ -113,8 +101,8 @@ docker compose up -d
 docker compose ps
 ```
 
-Backend listens on `127.0.0.1:8000`; frontend on `127.0.0.1:3000`. Host nginx
-proxies the public domains to them.
+Backend listens on `:8000`; frontend on `:3000` in their containers. Traefik
+proxies both under `data.opengeo.space` using path-based routing.
 
 ---
 
@@ -194,7 +182,9 @@ Tags: `:latest` and `:sha-<commit>`. Pin by editing `docker-compose.yml`.
 
 **Frontend blank / 404 on refresh** — Next standalone serves SPA fallback. Check `docker compose logs frontend`.
 
-**WebSocket "Reconnecting..."** — confirm nginx WS upgrade headers in `vps-infra/nginx/nginx.conf` `api.data.opengeo.space` block (`Upgrade`/`Connection`). Check backend logs.
+**WebSocket "Reconnecting..."** — confirm backend router uses
+`Host(\`data.opengeo.space\`) && PathPrefix(\`/api\`)` and forwards WS upgrades.
+Check backend logs.
 
 **502 from nginx** — container not running or not bound to `127.0.0.1:<port>`. `docker compose ps` + `ss -tlnp | grep -E '3000|8000'`.
 
