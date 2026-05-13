@@ -9,7 +9,7 @@ services:
     image: ghcr.io/sheldon-st/takdata:latest
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:8001:8000"
     volumes:
       - tak-data:/app/data
     environment:
@@ -23,7 +23,7 @@ services:
     image: ghcr.io/sheldon-st/takdata-frontend:latest
     restart: unless-stopped
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:3001:3000"
     networks:
       - takdata
     healthcheck:
