@@ -1,5 +1,6 @@
 """FastAPI dependency functions."""
 
+import re
 from typing import AsyncGenerator
 
 import aiosqlite
@@ -25,13 +26,22 @@ def get_runtime():
     return _runtime
 
 
+def _parse_groups(groups_raw: str) -> list[str]:
+    """Parse a groups header supporting common separators."""
+    return [g.strip() for g in re.split(r"[|,;]", groups_raw) if g.strip()]
+
+
 def get_current_user(conn: HTTPConnection) -> dict:
-    """Extract user identity from Authentik-injected request headers."""
-    username = conn.headers.get("x-authentik-username")
+    """Extract user identity from Authentik/forward-auth injected headers."""
+    username = conn.headers.get("x-authentik-username") or conn.headers.get(
+        "x-forwarded-preferred-username"
+    )
     if not username:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    groups_raw = conn.headers.get("x-authentik-groups", "")
-    groups = [g.strip() for g in groups_raw.split("|") if g.strip()]
+    groups_raw = conn.headers.get("x-authentik-groups") or conn.headers.get(
+        "x-forwarded-groups", ""
+    )
+    groups = _parse_groups(groups_raw)
     return {"username": username, "groups": groups}
 
 
