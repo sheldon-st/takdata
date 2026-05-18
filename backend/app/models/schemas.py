@@ -113,6 +113,9 @@ class EnablementCreate(BaseModel):
     selection_strategy: Optional[Literal["round_robin", "random", "zipf"]] = Field(
         None, description="Synthetic harness: how to pick K features each tick"
     )
+    seed_initial: Optional[bool] = Field(
+        False, description="Synthetic harness: emit all N features once at startup before steady-state loop"
+    )
 
 
 class EnablementUpdate(BaseModel):
@@ -130,6 +133,7 @@ class EnablementUpdate(BaseModel):
     updates_per_second: Optional[float] = None
     features_per_update: Optional[int] = None
     selection_strategy: Optional[Literal["round_robin", "random", "zipf"]] = None
+    seed_initial: Optional[bool] = None
 
 
 class EnablementResponse(BaseModel):
@@ -149,6 +153,7 @@ class EnablementResponse(BaseModel):
     updates_per_second: Optional[float] = None
     features_per_update: Optional[int] = None
     selection_strategy: Optional[str] = None
+    seed_initial: bool = False
     running: bool
     created_at: str
     updated_at: str

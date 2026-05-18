@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS enablements (
     updates_per_second  REAL,
     features_per_update INTEGER,
     selection_strategy  TEXT,
+    seed_initial        INTEGER NOT NULL DEFAULT 0,
     created_at          TEXT    NOT NULL DEFAULT (datetime('now')),
     updated_at          TEXT    NOT NULL DEFAULT (datetime('now'))
 );
@@ -81,6 +82,7 @@ _GEO_FILTER_MIGRATIONS = [
     "ALTER TABLE enablements ADD COLUMN updates_per_second REAL",
     "ALTER TABLE enablements ADD COLUMN features_per_update INTEGER",
     "ALTER TABLE enablements ADD COLUMN selection_strategy TEXT",
+    "ALTER TABLE enablements ADD COLUMN seed_initial INTEGER NOT NULL DEFAULT 0",
     # Wipe stale synthetic rows from v1 schema (user-confirmed)
     "DELETE FROM enablements WHERE type_id = 'synthetic' AND feature_count IS NULL",
     # Drop deprecated v1 cols (SQLite 3.35+)

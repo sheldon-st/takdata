@@ -64,11 +64,13 @@ async def create_enablement(db: aiosqlite.Connection, data: dict) -> dict:
         """INSERT INTO enablements
                (type_id, name, enabled, cot_stale, alt_upper, alt_lower, uid_key,
                 geo_filter_min_lat, geo_filter_max_lat, geo_filter_min_lon, geo_filter_max_lon,
-                feature_count, updates_per_second, features_per_update, selection_strategy)
+                feature_count, updates_per_second, features_per_update, selection_strategy,
+                seed_initial)
            VALUES
                (:type_id, :name, :enabled, :cot_stale, :alt_upper, :alt_lower, :uid_key,
                 :geo_filter_min_lat, :geo_filter_max_lat, :geo_filter_min_lon, :geo_filter_max_lon,
-                :feature_count, :updates_per_second, :features_per_update, :selection_strategy)""",
+                :feature_count, :updates_per_second, :features_per_update, :selection_strategy,
+                :seed_initial)""",
         data,
     )
     await db.commit()
@@ -203,6 +205,7 @@ def build_enablement_config(enablement: dict) -> dict:
     cfg["updates_per_second"] = enablement.get("updates_per_second")
     cfg["features_per_update"] = enablement.get("features_per_update")
     cfg["selection_strategy"] = enablement.get("selection_strategy")
+    cfg["seed_initial"] = bool(enablement.get("seed_initial"))
     return cfg
 
 
