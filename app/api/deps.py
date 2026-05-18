@@ -33,6 +33,8 @@ def _parse_groups(groups_raw: str) -> list[str]:
 
 def get_current_user(conn: HTTPConnection) -> dict:
     """Extract user identity from Authentik/forward-auth injected headers."""
+    if not settings.auth_enabled:
+        return {"username": "anonymous", "groups": [_ADMIN_GROUP]}
     username = conn.headers.get("x-authentik-username") or conn.headers.get(
         "x-forwarded-preferred-username"
     )

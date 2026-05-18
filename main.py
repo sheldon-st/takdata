@@ -89,4 +89,8 @@ async def root():
 async def me(user: dict = Depends(get_current_user)):
     """Return the current authenticated user's identity and role."""
     role = "admin" if "tak-manager-admin" in user["groups"] else "viewer"
-    return {"username": user["username"], "role": role}
+    return {
+        "username": user["username"],
+        "role": role,
+        "auth_enabled": settings.auth_enabled,
+    }

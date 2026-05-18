@@ -37,5 +37,9 @@ class Settings(BaseSettings):
     # Debug
     debug: bool = False
 
+    # Auth — when False, skip Authentik header check and treat all callers as admin.
+    # Intended for private LAN / single-operator deploys without a forward-auth proxy.
+    auth_enabled: bool = True
+
 
 settings = Settings()
