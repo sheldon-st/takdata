@@ -47,6 +47,8 @@ CREATE TABLE IF NOT EXISTS enablements (
     geo_filter_max_lat  REAL,
     geo_filter_min_lon  REAL,
     geo_filter_max_lon  REAL,
+    entity_count        INTEGER,
+    target_rate_hz      REAL,
     created_at          TEXT    NOT NULL DEFAULT (datetime('now')),
     updated_at          TEXT    NOT NULL DEFAULT (datetime('now'))
 );
@@ -72,6 +74,8 @@ _GEO_FILTER_MIGRATIONS = [
     "ALTER TABLE enablements ADD COLUMN geo_filter_max_lat REAL",
     "ALTER TABLE enablements ADD COLUMN geo_filter_min_lon REAL",
     "ALTER TABLE enablements ADD COLUMN geo_filter_max_lon REAL",
+    "ALTER TABLE enablements ADD COLUMN entity_count INTEGER",
+    "ALTER TABLE enablements ADD COLUMN target_rate_hz REAL",
 ]
 
 

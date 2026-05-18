@@ -107,6 +107,8 @@ class EnablementCreate(BaseModel):
     geo_filter_max_lat: Optional[float] = Field(None, description="Bounding box north latitude (-90 to 90)")
     geo_filter_min_lon: Optional[float] = Field(None, description="Bounding box west longitude (-180 to 180)")
     geo_filter_max_lon: Optional[float] = Field(None, description="Bounding box east longitude (-180 to 180)")
+    entity_count: Optional[int] = Field(None, description="Synthetic harness: number of unique entities to emit")
+    target_rate_hz: Optional[float] = Field(None, description="Synthetic harness: aggregate target updates per second")
 
 
 class EnablementUpdate(BaseModel):
@@ -120,6 +122,8 @@ class EnablementUpdate(BaseModel):
     geo_filter_max_lat: Optional[float] = None
     geo_filter_min_lon: Optional[float] = None
     geo_filter_max_lon: Optional[float] = None
+    entity_count: Optional[int] = None
+    target_rate_hz: Optional[float] = None
 
 
 class EnablementResponse(BaseModel):
@@ -135,6 +139,8 @@ class EnablementResponse(BaseModel):
     geo_filter_max_lat: Optional[float]
     geo_filter_min_lon: Optional[float]
     geo_filter_max_lon: Optional[float]
+    entity_count: Optional[int] = None
+    target_rate_hz: Optional[float] = None
     running: bool
     created_at: str
     updated_at: str
