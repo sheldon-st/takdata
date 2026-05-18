@@ -64,11 +64,11 @@ async def create_enablement(db: aiosqlite.Connection, data: dict) -> dict:
         """INSERT INTO enablements
                (type_id, name, enabled, cot_stale, alt_upper, alt_lower, uid_key,
                 geo_filter_min_lat, geo_filter_max_lat, geo_filter_min_lon, geo_filter_max_lon,
-                entity_count, target_rate_hz)
+                feature_count, updates_per_second, features_per_update, selection_strategy)
            VALUES
                (:type_id, :name, :enabled, :cot_stale, :alt_upper, :alt_lower, :uid_key,
                 :geo_filter_min_lat, :geo_filter_max_lat, :geo_filter_min_lon, :geo_filter_max_lon,
-                :entity_count, :target_rate_hz)""",
+                :feature_count, :updates_per_second, :features_per_update, :selection_strategy)""",
         data,
     )
     await db.commit()
@@ -198,9 +198,11 @@ def build_enablement_config(enablement: dict) -> dict:
     cfg["geo_filter_max_lat"] = enablement.get("geo_filter_max_lat")
     cfg["geo_filter_min_lon"] = enablement.get("geo_filter_min_lon")
     cfg["geo_filter_max_lon"] = enablement.get("geo_filter_max_lon")
-    # Synthetic harness knobs (None for non-synthetic types)
-    cfg["entity_count"] = enablement.get("entity_count")
-    cfg["target_rate_hz"] = enablement.get("target_rate_hz")
+    # Synthetic harness workload model (None for non-synthetic types)
+    cfg["feature_count"] = enablement.get("feature_count")
+    cfg["updates_per_second"] = enablement.get("updates_per_second")
+    cfg["features_per_update"] = enablement.get("features_per_update")
+    cfg["selection_strategy"] = enablement.get("selection_strategy")
     return cfg
 
 

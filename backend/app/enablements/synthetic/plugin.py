@@ -31,9 +31,11 @@ class SyntheticEnablement(EnablementPlugin):
         self._tasks.append(task)
         self._running = True
         self.log.info(
-            "Started synthetic harness: %d entities @ %.1f Hz",
-            self._worker.entity_count,
-            self._worker.target_rate_hz,
+            "Started synthetic harness: N=%d U=%.2fHz K=%d strategy=%s",
+            self._worker.N,
+            self._worker.U,
+            self._worker.K,
+            self._worker.strategy,
         )
 
     async def stop(self) -> None:

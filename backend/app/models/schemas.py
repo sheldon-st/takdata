@@ -107,8 +107,12 @@ class EnablementCreate(BaseModel):
     geo_filter_max_lat: Optional[float] = Field(None, description="Bounding box north latitude (-90 to 90)")
     geo_filter_min_lon: Optional[float] = Field(None, description="Bounding box west longitude (-180 to 180)")
     geo_filter_max_lon: Optional[float] = Field(None, description="Bounding box east longitude (-180 to 180)")
-    entity_count: Optional[int] = Field(None, description="Synthetic harness: number of unique entities to emit")
-    target_rate_hz: Optional[float] = Field(None, description="Synthetic harness: aggregate target updates per second")
+    feature_count: Optional[int] = Field(None, description="Synthetic harness: population of unique features (N)")
+    updates_per_second: Optional[float] = Field(None, description="Synthetic harness: tick rate in Hz (U)")
+    features_per_update: Optional[int] = Field(None, description="Synthetic harness: features touched per tick (K). Aggregate rate = U*K")
+    selection_strategy: Optional[Literal["round_robin", "random", "zipf"]] = Field(
+        None, description="Synthetic harness: how to pick K features each tick"
+    )
 
 
 class EnablementUpdate(BaseModel):
@@ -122,8 +126,10 @@ class EnablementUpdate(BaseModel):
     geo_filter_max_lat: Optional[float] = None
     geo_filter_min_lon: Optional[float] = None
     geo_filter_max_lon: Optional[float] = None
-    entity_count: Optional[int] = None
-    target_rate_hz: Optional[float] = None
+    feature_count: Optional[int] = None
+    updates_per_second: Optional[float] = None
+    features_per_update: Optional[int] = None
+    selection_strategy: Optional[Literal["round_robin", "random", "zipf"]] = None
 
 
 class EnablementResponse(BaseModel):
@@ -139,8 +145,10 @@ class EnablementResponse(BaseModel):
     geo_filter_max_lat: Optional[float]
     geo_filter_min_lon: Optional[float]
     geo_filter_max_lon: Optional[float]
-    entity_count: Optional[int] = None
-    target_rate_hz: Optional[float] = None
+    feature_count: Optional[int] = None
+    updates_per_second: Optional[float] = None
+    features_per_update: Optional[int] = None
+    selection_strategy: Optional[str] = None
     running: bool
     created_at: str
     updated_at: str
