@@ -5,11 +5,10 @@ Registers itself with the plugin registry via @register.
 
 import asyncio
 import logging
-from typing import Optional
 
+from app.enablements.ais.worker import AisWorker
 from app.enablements.base import EnablementPlugin, EnablementStats
 from app.enablements.registry import register
-from app.enablements.ais.worker import AisWorker
 
 log = logging.getLogger(__name__)
 
@@ -42,7 +41,7 @@ class AisEnablement(EnablementPlugin):
 
     def __init__(self, enablement_id: int, config: dict, tx_queue: asyncio.Queue) -> None:
         super().__init__(enablement_id, config, tx_queue)
-        self._worker: Optional[AisWorker] = None
+        self._worker: AisWorker | None = None
 
     async def start(self) -> None:
         sources = self.config.get("sources", [])

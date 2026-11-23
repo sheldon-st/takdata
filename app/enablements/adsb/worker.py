@@ -12,14 +12,13 @@ Key changes from send.py:
 import asyncio
 import logging
 import time
-from datetime import datetime
-from typing import Optional
+from datetime import UTC, datetime
 
 import aiohttp
 
-from app.enablements.base import EnablementStats, emit_cot
 from app.enablements.adsb.converter import adsb_to_cot
 from app.enablements.adsb.fetcher import fetch_adsb_aircraft
+from app.enablements.base import EnablementStats, emit_cot
 
 log = logging.getLogger(__name__)
 
@@ -44,12 +43,11 @@ class AdsbWorker:
         self._api_semaphore = asyncio.Semaphore(10)
         self._stats = EnablementStats()
         self._source_stats: dict[str, dict] = {
-            s["name"]: {"last_poll": None, "aircraft_count": 0}
-            for s in sources
+            s["name"]: {"last_poll": None, "aircraft_count": 0} for s in sources
         }
-        self._geo_filter: Optional[tuple[float, float, float, float]] = self._parse_geo_filter()
+        self._geo_filter: tuple[float, float, float, float] | None = self._parse_geo_filter()
 
-    def _parse_geo_filter(self) -> Optional[tuple[float, float, float, float]]:
+    def _parse_geo_filter(self) -> tuple[float, float, float, float] | None:
         """Return (min_lat, max_lat, min_lon, max_lon) if all four bounds are set, else None."""
         vals = (
             self.config.get("geo_filter_min_lat"),
@@ -61,7 +59,10 @@ class AdsbWorker:
             bbox = tuple(float(v) for v in vals)  # type: ignore[arg-type]
             log.info(
                 "Geo filter active: lat [%s, %s], lon [%s, %s]",
-                bbox[0], bbox[1], bbox[2], bbox[3],
+                bbox[0],
+                bbox[1],
+                bbox[2],
+                bbox[3],
             )
             return bbox  # type: ignore[return-value]
         return None
@@ -161,9 +162,9 @@ class AdsbWorker:
 
         # Update source-level stats
         self._source_stats.setdefault(name, {})
-        self._source_stats[name]["last_poll"] = datetime.utcnow().isoformat()
+        self._source_stats[name]["last_poll"] = datetime.now(UTC).isoformat()
         self._source_stats[name]["aircraft_count"] = len(with_location)
-        self._stats.last_poll_time = datetime.utcnow()
+        self._stats.last_poll_time = datetime.now(UTC)
 
         # Deduplicate and process
         to_process = self._deduplicate(with_location, name)
@@ -183,9 +184,7 @@ class AdsbWorker:
         # Periodic cleanup of stale cache entries
         if len(self._seen_aircraft) > 1000:
             cutoff = now - self._cache_ttl
-            self._seen_aircraft = {
-                k: v for k, v in self._seen_aircraft.items() if v[0] > cutoff
-            }
+            self._seen_aircraft = {k: v for k, v in self._seen_aircraft.items() if v[0] > cutoff}
 
         for ac in aircraft_list:
             icao = str(ac.get("hex") or ac.get("icao", "")).strip().upper()
@@ -195,8 +194,9 @@ class AdsbWorker:
             cached = self._seen_aircraft.get(icao)
             if cached:
                 _, old_data = cached
-                if (ac.get("messages", 0) > old_data.get("messages", 0)
-                        or ac.get("lat") != old_data.get("lat")):
+                if ac.get("messages", 0) > old_data.get("messages", 0) or ac.get(
+                    "lat"
+                ) != old_data.get("lat"):
                     self._seen_aircraft[icao] = (now, ac)
                     to_process.append(ac)
             else:
@@ -226,8 +226,9 @@ class AdsbWorker:
                 if cot_bytes:
                     await emit_cot(self.tx_queue, cot_bytes, self._stats)
             except Exception as exc:
-                log.error("[%s] CoT conversion error for %s: %s",
-                          source_name, ac.get("hex", "?"), exc)
+                log.error(
+                    "[%s] CoT conversion error for %s: %s", source_name, ac.get("hex", "?"), exc
+                )
 
         batch_size = 50
         for i in range(0, len(aircraft_list), batch_size):

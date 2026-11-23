@@ -5,7 +5,6 @@ Bridges API routes ↔ SQLite ↔ RuntimeManager.
 
 import logging
 from pathlib import Path
-from typing import Optional
 
 import aiosqlite
 
@@ -17,6 +16,7 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # TAK config helpers
 # ---------------------------------------------------------------------------
+
 
 async def get_tak_config(db: aiosqlite.Connection) -> dict:
     cursor = await db.execute("SELECT * FROM tak_config WHERE id = 1")
@@ -39,6 +39,7 @@ async def update_tak_config(db: aiosqlite.Connection, data: dict) -> dict:
 # Enablement CRUD
 # ---------------------------------------------------------------------------
 
+
 async def list_enablements(db: aiosqlite.Connection) -> list[dict]:
     rows = await (await db.execute("SELECT * FROM enablements ORDER BY id")).fetchall()
     result = []
@@ -49,7 +50,7 @@ async def list_enablements(db: aiosqlite.Connection) -> list[dict]:
     return result
 
 
-async def get_enablement(db: aiosqlite.Connection, enablement_id: int) -> Optional[dict]:
+async def get_enablement(db: aiosqlite.Connection, enablement_id: int) -> dict | None:
     cursor = await db.execute("SELECT * FROM enablements WHERE id = ?", (enablement_id,))
     row = await cursor.fetchone()
     if not row:
@@ -79,11 +80,11 @@ async def create_enablement(db: aiosqlite.Connection, data: dict) -> dict:
 
 async def update_enablement(
     db: aiosqlite.Connection, enablement_id: int, data: dict
-) -> Optional[dict]:
+) -> dict | None:
     if not data:
         return await get_enablement(db, enablement_id)
     fields = ", ".join(f"{k} = ?" for k in data)
-    values = list(data.values()) + [enablement_id]
+    values = [*data.values(), enablement_id]
     await db.execute(
         f"UPDATE enablements SET {fields}, updated_at = datetime('now') WHERE id = ?",
         values,
@@ -93,9 +94,7 @@ async def update_enablement(
 
 
 async def delete_enablement(db: aiosqlite.Connection, enablement_id: int) -> bool:
-    cursor = await db.execute(
-        "DELETE FROM enablements WHERE id = ?", (enablement_id,)
-    )
+    cursor = await db.execute("DELETE FROM enablements WHERE id = ?", (enablement_id,))
     await db.commit()
     return cursor.rowcount > 0
 
@@ -103,6 +102,7 @@ async def delete_enablement(db: aiosqlite.Connection, enablement_id: int) -> boo
 # ---------------------------------------------------------------------------
 # Source CRUD
 # ---------------------------------------------------------------------------
+
 
 async def _get_sources_for(db: aiosqlite.Connection, enablement_id: int) -> list[dict]:
     rows = await (
@@ -125,9 +125,7 @@ async def list_sources(db: aiosqlite.Connection, enablement_id: int) -> list[dic
     return await _get_sources_for(db, enablement_id)
 
 
-async def get_source(
-    db: aiosqlite.Connection, enablement_id: int, source_id: int
-) -> Optional[dict]:
+async def get_source(db: aiosqlite.Connection, enablement_id: int, source_id: int) -> dict | None:
     cursor = await db.execute(
         "SELECT * FROM sources WHERE id = ? AND enablement_id = ?",
         (source_id, enablement_id),
@@ -136,9 +134,7 @@ async def get_source(
     return _source_row(row) if row else None
 
 
-async def create_source(
-    db: aiosqlite.Connection, enablement_id: int, data: dict
-) -> dict:
+async def create_source(db: aiosqlite.Connection, enablement_id: int, data: dict) -> dict:
     data["enablement_id"] = enablement_id
     cursor = await db.execute(
         """INSERT INTO sources
@@ -155,11 +151,11 @@ async def create_source(
 
 async def update_source(
     db: aiosqlite.Connection, enablement_id: int, source_id: int, data: dict
-) -> Optional[dict]:
+) -> dict | None:
     if not data:
         return await get_source(db, enablement_id, source_id)
     fields = ", ".join(f"{k} = ?" for k in data)
-    values = list(data.values()) + [source_id, enablement_id]
+    values = [*data.values(), source_id, enablement_id]
     await db.execute(
         f"UPDATE sources SET {fields} WHERE id = ? AND enablement_id = ?",
         values,
@@ -168,9 +164,7 @@ async def update_source(
     return await get_source(db, enablement_id, source_id)
 
 
-async def delete_source(
-    db: aiosqlite.Connection, enablement_id: int, source_id: int
-) -> bool:
+async def delete_source(db: aiosqlite.Connection, enablement_id: int, source_id: int) -> bool:
     cursor = await db.execute(
         "DELETE FROM sources WHERE id = ? AND enablement_id = ?",
         (source_id, enablement_id),
@@ -182,6 +176,7 @@ async def delete_source(
 # ---------------------------------------------------------------------------
 # Build runtime config from DB row
 # ---------------------------------------------------------------------------
+
 
 def build_enablement_config(enablement: dict) -> dict:
     """
@@ -220,9 +215,8 @@ def build_enablement_config(enablement: dict) -> dict:
 # Startup restore
 # ---------------------------------------------------------------------------
 
-async def restore_active_enablements(
-    runtime: RuntimeManager, db_path: Path
-) -> None:
+
+async def restore_active_enablements(runtime: RuntimeManager, db_path: Path) -> None:
     """
     Re-arm all enabled=1 enablements on API startup.
     Connects to TAK server first; logs errors but does not crash the API.
@@ -264,9 +258,7 @@ async def restore_active_enablements(
             return
 
         # Restore enabled enablements
-        rows = await (
-            await db.execute("SELECT * FROM enablements WHERE enabled = 1")
-        ).fetchall()
+        rows = await (await db.execute("SELECT * FROM enablements WHERE enabled = 1")).fetchall()
 
         for row in rows:
             enablement = dict(row)

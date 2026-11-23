@@ -17,8 +17,7 @@ Design notes:
 import asyncio
 import logging
 from configparser import ConfigParser
-from datetime import datetime
-from typing import Optional
+from datetime import UTC, datetime
 
 import pytak
 
@@ -33,11 +32,11 @@ RECONNECT_BACKOFF = (5, 10, 20, 40, 60)
 
 class RuntimeManager:
     def __init__(self) -> None:
-        self._clitool: Optional[pytak.CLITool] = None
-        self._tx_queue: Optional[asyncio.Queue] = None
+        self._clitool: pytak.CLITool | None = None
+        self._tx_queue: asyncio.Queue | None = None
         self._connected: bool = False
         self._tak_config: dict = {}
-        self._connect_error: Optional[str] = None
+        self._connect_error: str | None = None
 
         # enablement_id (DB row id) -> plugin instance
         self._active_enablements: dict[int, EnablementPlugin] = {}
@@ -45,7 +44,7 @@ class RuntimeManager:
         # every plugin against the new tx_queue
         self._active_configs: dict[int, tuple[str, dict]] = {}
 
-        self._supervisor: Optional[asyncio.Task] = None
+        self._supervisor: asyncio.Task | None = None
         self._shutting_down: bool = False
 
     # ------------------------------------------------------------------
@@ -171,9 +170,7 @@ class RuntimeManager:
                 parts.append(f"{name} cancelled")
                 continue
             exc = task.exception()
-            parts.append(
-                f"{name} failed: {type(exc).__name__}: {exc}" if exc else f"{name} exited"
-            )
+            parts.append(f"{name} failed: {type(exc).__name__}: {exc}" if exc else f"{name} exited")
         return "; ".join(parts) or "TAK worker exited"
 
     async def _reconnect(self) -> bool:
@@ -213,9 +210,7 @@ class RuntimeManager:
     # Enablement lifecycle
     # ------------------------------------------------------------------
 
-    async def start_enablement(
-        self, enablement_id: int, type_id: str, config: dict
-    ) -> None:
+    async def start_enablement(self, enablement_id: int, type_id: str, config: dict) -> None:
         """
         Instantiate and start an enablement plugin.
 
@@ -285,7 +280,9 @@ class RuntimeManager:
                     "running": plugin.is_running,
                     "events_sent": stats.events_sent,
                     "events_dropped": stats.events_dropped,
-                    "last_poll_time": stats.last_poll_time.isoformat() if stats.last_poll_time else None,
+                    "last_poll_time": stats.last_poll_time.isoformat()
+                    if stats.last_poll_time
+                    else None,
                     "last_error": stats.last_error,
                     "active_items": stats.active_items,
                     "source_stats": stats.source_stats,
@@ -298,7 +295,7 @@ class RuntimeManager:
             "tx_queue_size": self._tx_queue.qsize() if self._tx_queue else 0,
             "connect_error": self._connect_error,
             "enablements": enablements_status,
-            "server_time": datetime.utcnow().isoformat(),
+            "server_time": datetime.now(UTC).isoformat(),
         }
 
     @property
@@ -306,7 +303,7 @@ class RuntimeManager:
         return self._connected
 
     @property
-    def tx_queue(self) -> Optional[asyncio.Queue]:
+    def tx_queue(self) -> asyncio.Queue | None:
         return self._tx_queue
 
 

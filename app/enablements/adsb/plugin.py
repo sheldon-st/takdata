@@ -5,11 +5,10 @@ Registers itself with the plugin registry via @register.
 
 import asyncio
 import logging
-from typing import Optional
 
+from app.enablements.adsb.worker import AdsbWorker
 from app.enablements.base import EnablementPlugin, EnablementStats
 from app.enablements.registry import register
-from app.enablements.adsb.worker import AdsbWorker
 
 log = logging.getLogger(__name__)
 
@@ -61,7 +60,7 @@ class AdsbEnablement(EnablementPlugin):
 
     def __init__(self, enablement_id: int, config: dict, tx_queue: asyncio.Queue) -> None:
         super().__init__(enablement_id, config, tx_queue)
-        self._worker: Optional[AdsbWorker] = None
+        self._worker: AdsbWorker | None = None
 
     async def start(self) -> None:
         sources = self.config.get("sources", [])

@@ -5,7 +5,6 @@ Adapted from send.py:fetch_adsb_data_from_source().
 
 import logging
 import random
-from typing import Optional
 
 import aiohttp
 

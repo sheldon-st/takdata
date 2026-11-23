@@ -1,7 +1,6 @@
 """Synthetic CoT harness enablement — load-test takserver."""
 
 import asyncio
-from typing import Optional
 
 from app.enablements.base import EnablementPlugin, EnablementStats
 from app.enablements.registry import register
@@ -19,7 +18,7 @@ class SyntheticEnablement(EnablementPlugin):
 
     def __init__(self, enablement_id: int, config: dict, tx_queue: asyncio.Queue) -> None:
         super().__init__(enablement_id, config, tx_queue)
-        self._worker: Optional[SyntheticWorker] = None
+        self._worker: SyntheticWorker | None = None
 
     async def start(self) -> None:
         self._worker = SyntheticWorker(

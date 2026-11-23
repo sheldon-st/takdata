@@ -2,20 +2,19 @@
 Pydantic request/response models for all API routes.
 """
 
-from datetime import datetime
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field
-
 
 # ---------------------------------------------------------------------------
 # TAK Server Config
 # ---------------------------------------------------------------------------
 
+
 class TakConfigUpdate(BaseModel):
     cot_url: str = Field("tls://localhost:8089", description="TAK server CoT URL")
-    cert_path: Optional[str] = Field(None, description="Path to .p12 cert under data/certs/")
-    cert_password: Optional[str] = Field(None, description="Password for the .p12 certificate")
+    cert_path: str | None = Field(None, description="Path to .p12 cert under data/certs/")
+    cert_password: str | None = Field(None, description="Password for the .p12 certificate")
     cot_host_id: str = Field("tak-manager", description="Host ID embedded in CoT events")
     dont_check_hostname: bool = Field(True, description="Skip TLS hostname verification")
     dont_verify: bool = Field(True, description="Skip TLS certificate verification")
@@ -26,13 +25,13 @@ class TakConfigUpdate(BaseModel):
 class TakConfigResponse(BaseModel):
     id: int
     cot_url: str
-    cert_path: Optional[str]
+    cert_path: str | None
     cot_host_id: str
     dont_check_hostname: bool
     dont_verify: bool
     max_out_queue: int
     max_in_queue: int
-    updated_at: Optional[str]
+    updated_at: str | None
     # cert_password intentionally omitted from response
 
 
@@ -46,6 +45,7 @@ class TakStatusResponse(BaseModel):
 # Cert management
 # ---------------------------------------------------------------------------
 
+
 class CertInfo(BaseModel):
     cert_id: str
     filename: str
@@ -54,6 +54,7 @@ class CertInfo(BaseModel):
 # ---------------------------------------------------------------------------
 # Data packages
 # ---------------------------------------------------------------------------
+
 
 class PackageInfo(BaseModel):
     package_id: str
@@ -65,15 +66,16 @@ class PackageInfo(BaseModel):
 # Sources
 # ---------------------------------------------------------------------------
 
+
 class SourceCreate(BaseModel):
     name: str = Field(..., description="Friendly label, e.g. 'adsb.fi-military'")
     base_url: str = Field(..., description="Base API URL")
     endpoint: Literal["geo", "point", "mil"] = Field("geo")
     sleep_interval: float = Field(5.0, description="Polling interval in seconds")
-    lat: Optional[float] = Field(None, description="Latitude for geo/point queries")
-    lon: Optional[float] = Field(None, description="Longitude for geo/point queries")
-    distance: Optional[float] = Field(25.0, description="Radius in nautical miles")
-    api_key: Optional[str] = Field(
+    lat: float | None = Field(None, description="Latitude for geo/point queries")
+    lon: float | None = Field(None, description="Longitude for geo/point queries")
+    distance: float | None = Field(25.0, description="Radius in nautical miles")
+    api_key: str | None = Field(
         None,
         description="Credential for sources that need one (e.g. aisstream.io). Write-only.",
     )
@@ -81,15 +83,15 @@ class SourceCreate(BaseModel):
 
 
 class SourceUpdate(BaseModel):
-    name: Optional[str] = None
-    base_url: Optional[str] = None
-    endpoint: Optional[Literal["geo", "point", "mil"]] = None
-    sleep_interval: Optional[float] = None
-    lat: Optional[float] = None
-    lon: Optional[float] = None
-    distance: Optional[float] = None
-    api_key: Optional[str] = Field(None, description="Write-only. Send an empty string to clear.")
-    enabled: Optional[bool] = None
+    name: str | None = None
+    base_url: str | None = None
+    endpoint: Literal["geo", "point", "mil"] | None = None
+    sleep_interval: float | None = None
+    lat: float | None = None
+    lon: float | None = None
+    distance: float | None = None
+    api_key: str | None = Field(None, description="Write-only. Send an empty string to clear.")
+    enabled: bool | None = None
 
 
 class SourceResponse(BaseModel):
@@ -99,9 +101,9 @@ class SourceResponse(BaseModel):
     base_url: str
     endpoint: str
     sleep_interval: float
-    lat: Optional[float]
-    lon: Optional[float]
-    distance: Optional[float]
+    lat: float | None
+    lon: float | None
+    distance: float | None
     has_api_key: bool = False
     enabled: bool
     created_at: str
@@ -112,6 +114,7 @@ class SourceResponse(BaseModel):
 # Enablements
 # ---------------------------------------------------------------------------
 
+
 class EnablementCreate(BaseModel):
     type_id: str = Field(..., description="Plugin type, e.g. 'adsb' or 'ais'")
     name: str = Field(..., description="User-friendly label")
@@ -120,37 +123,53 @@ class EnablementCreate(BaseModel):
     alt_upper: int = Field(0, description="Upper altitude filter in feet (0 = disabled)")
     alt_lower: int = Field(0, description="Lower altitude filter in feet (0 = disabled)")
     uid_key: str = Field("ICAO", description="UID key: ICAO, REG, or FLIGHT")
-    geo_filter_min_lat: Optional[float] = Field(None, description="Bounding box south latitude (-90 to 90); all four required to enable filter")
-    geo_filter_max_lat: Optional[float] = Field(None, description="Bounding box north latitude (-90 to 90)")
-    geo_filter_min_lon: Optional[float] = Field(None, description="Bounding box west longitude (-180 to 180)")
-    geo_filter_max_lon: Optional[float] = Field(None, description="Bounding box east longitude (-180 to 180)")
-    feature_count: Optional[int] = Field(None, description="Synthetic harness: population of unique features (N)")
-    updates_per_second: Optional[float] = Field(None, description="Synthetic harness: tick rate in Hz (U)")
-    features_per_update: Optional[int] = Field(None, description="Synthetic harness: features touched per tick (K). Aggregate rate = U*K")
-    selection_strategy: Optional[Literal["round_robin", "random", "zipf"]] = Field(
+    geo_filter_min_lat: float | None = Field(
+        None,
+        description="Bounding box south latitude (-90 to 90); all four required to enable filter",
+    )
+    geo_filter_max_lat: float | None = Field(
+        None, description="Bounding box north latitude (-90 to 90)"
+    )
+    geo_filter_min_lon: float | None = Field(
+        None, description="Bounding box west longitude (-180 to 180)"
+    )
+    geo_filter_max_lon: float | None = Field(
+        None, description="Bounding box east longitude (-180 to 180)"
+    )
+    feature_count: int | None = Field(
+        None, description="Synthetic harness: population of unique features (N)"
+    )
+    updates_per_second: float | None = Field(
+        None, description="Synthetic harness: tick rate in Hz (U)"
+    )
+    features_per_update: int | None = Field(
+        None, description="Synthetic harness: features touched per tick (K). Aggregate rate = U*K"
+    )
+    selection_strategy: Literal["round_robin", "random", "zipf"] | None = Field(
         None, description="Synthetic harness: how to pick K features each tick"
     )
-    seed_initial: Optional[bool] = Field(
-        False, description="Synthetic harness: emit all N features once at startup before steady-state loop"
+    seed_initial: bool | None = Field(
+        False,
+        description="Synthetic harness: emit all N features once at startup, then steady-state",
     )
 
 
 class EnablementUpdate(BaseModel):
-    name: Optional[str] = None
-    enabled: Optional[bool] = None
-    cot_stale: Optional[int] = None
-    alt_upper: Optional[int] = None
-    alt_lower: Optional[int] = None
-    uid_key: Optional[str] = None
-    geo_filter_min_lat: Optional[float] = None
-    geo_filter_max_lat: Optional[float] = None
-    geo_filter_min_lon: Optional[float] = None
-    geo_filter_max_lon: Optional[float] = None
-    feature_count: Optional[int] = None
-    updates_per_second: Optional[float] = None
-    features_per_update: Optional[int] = None
-    selection_strategy: Optional[Literal["round_robin", "random", "zipf"]] = None
-    seed_initial: Optional[bool] = None
+    name: str | None = None
+    enabled: bool | None = None
+    cot_stale: int | None = None
+    alt_upper: int | None = None
+    alt_lower: int | None = None
+    uid_key: str | None = None
+    geo_filter_min_lat: float | None = None
+    geo_filter_max_lat: float | None = None
+    geo_filter_min_lon: float | None = None
+    geo_filter_max_lon: float | None = None
+    feature_count: int | None = None
+    updates_per_second: float | None = None
+    features_per_update: int | None = None
+    selection_strategy: Literal["round_robin", "random", "zipf"] | None = None
+    seed_initial: bool | None = None
 
 
 class EnablementResponse(BaseModel):
@@ -162,14 +181,14 @@ class EnablementResponse(BaseModel):
     alt_upper: int
     alt_lower: int
     uid_key: str
-    geo_filter_min_lat: Optional[float]
-    geo_filter_max_lat: Optional[float]
-    geo_filter_min_lon: Optional[float]
-    geo_filter_max_lon: Optional[float]
-    feature_count: Optional[int] = None
-    updates_per_second: Optional[float] = None
-    features_per_update: Optional[int] = None
-    selection_strategy: Optional[str] = None
+    geo_filter_min_lat: float | None
+    geo_filter_max_lat: float | None
+    geo_filter_min_lon: float | None
+    geo_filter_max_lon: float | None
+    feature_count: int | None = None
+    updates_per_second: float | None = None
+    features_per_update: int | None = None
+    selection_strategy: str | None = None
     seed_initial: bool = False
     running: bool
     created_at: str
@@ -181,6 +200,7 @@ class EnablementResponse(BaseModel):
 # Enablement type metadata (from plugin registry)
 # ---------------------------------------------------------------------------
 
+
 class EnablementTypeInfo(BaseModel):
     type_id: str
     display_name: str
@@ -191,9 +211,10 @@ class EnablementTypeInfo(BaseModel):
 # Status
 # ---------------------------------------------------------------------------
 
+
 class SourceStatsItem(BaseModel):
     name: str
-    last_poll: Optional[str]
+    last_poll: str | None
     aircraft_count: int
 
 
@@ -204,8 +225,8 @@ class EnablementStatusItem(BaseModel):
     running: bool
     events_sent: int
     events_dropped: int = 0
-    last_poll_time: Optional[str]
-    last_error: Optional[str]
+    last_poll_time: str | None
+    last_error: str | None
     active_items: int
     source_stats: dict
 
@@ -214,6 +235,6 @@ class StatusResponse(BaseModel):
     tak_connected: bool
     tak_url: str
     tx_queue_size: int
-    connect_error: Optional[str] = None
+    connect_error: str | None = None
     enablements: list[EnablementStatusItem]
     server_time: str

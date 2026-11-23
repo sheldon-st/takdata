@@ -11,7 +11,6 @@ import logging
 import re
 import uuid
 from pathlib import Path
-from typing import Optional
 
 log = logging.getLogger(__name__)
 
@@ -60,7 +59,7 @@ class FileStore:
         entries.sort(key=lambda e: e["mtime"], reverse=True)
         return entries
 
-    def path_for(self, file_id: str) -> Optional[Path]:
+    def path_for(self, file_id: str) -> Path | None:
         """Resolve an id to its file, or None if the id is invalid or unknown."""
         if not is_valid_id(file_id) or not self.root.exists():
             return None

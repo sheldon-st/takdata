@@ -5,7 +5,6 @@ Packages live under data/packages/ as {package_id}_{original}.zip; see FileStore
 """
 
 from pathlib import Path
-from typing import Optional
 
 from app.services.file_store import FileStore
 
@@ -22,7 +21,7 @@ def list_packages(packages_dir: Path) -> list[dict]:
     ]
 
 
-def package_path_for_id(packages_dir: Path, package_id: str) -> Optional[Path]:
+def package_path_for_id(packages_dir: Path, package_id: str) -> Path | None:
     return _store(packages_dir).path_for(package_id)
 
 

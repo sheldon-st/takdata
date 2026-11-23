@@ -16,7 +16,7 @@ import json
 import logging
 import math
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 
 import websockets
 
@@ -105,9 +105,7 @@ class AisWorker:
     def get_stats(self) -> EnablementStats:
         now = time.time()
         cutoff = now - self._DEFAULT_EMIT_INTERVAL * 10
-        self._active_vessels = {
-            k: v for k, v in self._active_vessels.items() if v > cutoff
-        }
+        self._active_vessels = {k: v for k, v in self._active_vessels.items() if v > cutoff}
         # Drop per-vessel caches for vessels that went quiet so a long-running
         # global feed doesn't grow these dicts without bound.
         self._last_sent = {k: v for k, v in self._last_sent.items() if k in self._active_vessels}
@@ -141,9 +139,7 @@ class AisWorker:
         while True:
             try:
                 await self._stream_source(source)
-                log.warning(
-                    "[%s] Stream ended cleanly, reconnecting in %.0fs", name, delay
-                )
+                log.warning("[%s] Stream ended cleanly, reconnecting in %.0fs", name, delay)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -299,9 +295,7 @@ class AisWorker:
     ) -> None:
         """Throttle, build vessel dict, convert to CoT, and enqueue."""
         now = time.time()
-        emit_interval = float(
-            source.get("sleep_interval") or self._DEFAULT_EMIT_INTERVAL
-        )
+        emit_interval = float(source.get("sleep_interval") or self._DEFAULT_EMIT_INTERVAL)
 
         if now - self._last_sent.get(mmsi, 0) < emit_interval:
             return
@@ -341,10 +335,10 @@ class AisWorker:
             if cot_bytes:
                 await emit_cot(self.tx_queue, cot_bytes, self._stats)
                 self._last_sent[mmsi] = now
-                self._stats.last_poll_time = datetime.utcnow()
+                self._stats.last_poll_time = datetime.now(UTC)
 
                 src = self._source_stats.setdefault(source_name, {})
-                src["last_message"] = datetime.utcnow().isoformat()
+                src["last_message"] = datetime.now(UTC).isoformat()
                 src["vessel_count"] = len(self._active_vessels)
 
         except Exception as exc:

@@ -6,7 +6,6 @@ Adapted from send.py:adsb_to_cot_xml() and adsb_to_cot().
 import logging
 import xml.etree.ElementTree as ET
 from configparser import SectionProxy
-from typing import Optional, Union
 
 import aircot
 import pytak
@@ -16,9 +15,9 @@ log = logging.getLogger(__name__)
 
 def adsb_to_cot_xml(
     craft: dict,
-    config: Union[SectionProxy, dict, None] = None,
-    known_craft: Optional[dict] = None,
-) -> Optional[ET.Element]:
+    config: SectionProxy | dict | None = None,
+    known_craft: dict | None = None,
+) -> ET.Element | None:
     """
     Serialize ADS-B aircraft data as a CoT XML Element.
 
@@ -57,14 +56,14 @@ def adsb_to_cot_xml(
     __adsb.set("cot_host_id", cot_host_id)
 
     # --- Identifiers ---
-    icao_addr: str = aircot.icao_int_to_hex(
-        craft.get("icao_addr", craft.get("Icao_addr", 0))
-    )
+    icao_addr: str = aircot.icao_int_to_hex(craft.get("icao_addr", craft.get("Icao_addr", 0)))
     icao_hex: str = str(craft.get("hex", craft.get("icao", icao_addr))).strip().upper()
 
     flight: str = str(craft.get("flight", craft.get("Tail", ""))).strip().upper()
     reg: str = str(craft.get("reg", craft.get("r", craft.get("Reg", "")))).strip().upper()
-    cat: str = str(craft.get("cat", craft.get("Category", craft.get("category", "")))).strip().upper()
+    cat: str = (
+        str(craft.get("cat", craft.get("Category", craft.get("category", "")))).strip().upper()
+    )
     squawk: str = str(craft.get("squawk", craft.get("Squawk", ""))).strip().upper()
     craft_type: str = str(craft.get("t", craft.get("TargetType", 0))).strip().upper()
     desc: str = str(craft.get("desc", craft.get("Description", ""))).strip()
@@ -242,9 +241,9 @@ def adsb_to_cot_xml(
 
 def adsb_to_cot(
     craft: dict,
-    config: Union[SectionProxy, dict, None] = None,
-    known_craft: Optional[dict] = None,
-) -> Optional[bytes]:
+    config: SectionProxy | dict | None = None,
+    known_craft: dict | None = None,
+) -> bytes | None:
     """Convert an ADS-B aircraft dict to CoT XML bytes. Returns None if skipped."""
     cot = adsb_to_cot_xml(craft, config, known_craft)
     if cot is None:

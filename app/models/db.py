@@ -7,9 +7,10 @@ Tables:
   sources      — data sources per enablement
 """
 
+import contextlib
 import logging
+from collections.abc import AsyncGenerator
 from pathlib import Path
-from typing import AsyncGenerator, Optional
 
 import aiosqlite
 
@@ -94,7 +95,7 @@ _GEO_FILTER_MIGRATIONS = [
 ]
 
 
-async def init_db(db_path: Optional[Path] = None) -> None:
+async def init_db(db_path: Path | None = None) -> None:
     """Create tables and seed default TAK config row. Called from app lifespan."""
     path = db_path or DB_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -103,15 +104,14 @@ async def init_db(db_path: Optional[Path] = None) -> None:
         await db.execute("INSERT OR IGNORE INTO tak_config (id) VALUES (1)")
         # Migrate existing databases that predate the geo-filter columns.
         for stmt in _GEO_FILTER_MIGRATIONS:
-            try:
+            # Column already added / dropped on an earlier boot — safe to ignore.
+            with contextlib.suppress(aiosqlite.OperationalError):
                 await db.execute(stmt)
-            except Exception:
-                pass  # Column already exists — safe to ignore
         await db.commit()
     log.info("Database initialised at %s", path)
 
 
-async def get_db(db_path: Optional[Path] = None) -> AsyncGenerator[aiosqlite.Connection, None]:
+async def get_db(db_path: Path | None = None) -> AsyncGenerator[aiosqlite.Connection, None]:
     """
     FastAPI dependency that yields an aiosqlite connection.
 
