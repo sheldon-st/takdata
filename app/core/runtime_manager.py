@@ -230,6 +230,12 @@ class RuntimeManager:
             await self.stop_enablement(enablement_id)
 
         plugin_cls = get_plugin_class(type_id)
+        # Converters stamp COT_HOST_ID into every event; default it from the
+        # TAK config so the operator's setting actually reaches the wire.
+        config = {
+            "COT_HOST_ID": self._tak_config.get("cot_host_id") or pytak.DEFAULT_HOST_ID,
+            **config,
+        }
         plugin = plugin_cls(
             enablement_id=enablement_id,
             config=config,
