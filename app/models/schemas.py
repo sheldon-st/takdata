@@ -186,6 +186,7 @@ class EnablementStatusItem(BaseModel):
     type_id: str
     running: bool
     events_sent: int
+    events_dropped: int = 0
     last_poll_time: Optional[str]
     last_error: Optional[str]
     active_items: int
@@ -196,5 +197,6 @@ class StatusResponse(BaseModel):
     tak_connected: bool
     tak_url: str
     tx_queue_size: int
+    connect_error: Optional[str] = None
     enablements: list[EnablementStatusItem]
     server_time: str
