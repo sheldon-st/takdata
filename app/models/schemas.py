@@ -63,6 +63,10 @@ class SourceCreate(BaseModel):
     lat: Optional[float] = Field(None, description="Latitude for geo/point queries")
     lon: Optional[float] = Field(None, description="Longitude for geo/point queries")
     distance: Optional[float] = Field(25.0, description="Radius in nautical miles")
+    api_key: Optional[str] = Field(
+        None,
+        description="Credential for sources that need one (e.g. aisstream.io). Write-only.",
+    )
     enabled: bool = True
 
 
@@ -74,6 +78,7 @@ class SourceUpdate(BaseModel):
     lat: Optional[float] = None
     lon: Optional[float] = None
     distance: Optional[float] = None
+    api_key: Optional[str] = Field(None, description="Write-only. Send an empty string to clear.")
     enabled: Optional[bool] = None
 
 
@@ -87,8 +92,10 @@ class SourceResponse(BaseModel):
     lat: Optional[float]
     lon: Optional[float]
     distance: Optional[float]
+    has_api_key: bool = False
     enabled: bool
     created_at: str
+    # api_key intentionally omitted from response
 
 
 # ---------------------------------------------------------------------------

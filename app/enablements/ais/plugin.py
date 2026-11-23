@@ -19,12 +19,13 @@ KNOWN_SOURCES = [
         "id": "aisstream_io",
         "name": "aisstream.io",
         "base_url": "wss://stream.aisstream.io/v0/stream",
-        "endpoint": "",  # API key — obtain a free key at https://aisstream.io
+        "endpoint": "geo",
         "description": (
             "Real-time global AIS vessel tracking via aisstream.io WebSocket. "
-            "Free API key required. Set lat/lon/distance on this source to define "
-            "the area of interest."
+            "Free API key required (https://aisstream.io). Set lat/lon/distance "
+            "on this source to define the area of interest."
         ),
+        "requires_api_key": True,
         "requires_location": True,
     },
 ]

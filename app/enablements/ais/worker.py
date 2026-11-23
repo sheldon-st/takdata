@@ -1,9 +1,10 @@
 """
 AIS WebSocket worker for aisstream.io.
 
-Maintains one persistent WebSocket connection per source.  Each source is
-identified by its API key (stored in the `endpoint` field) and geographic
-bounding boxes derived from lat/lon/distance or the enablement geo filter.
+Maintains one persistent WebSocket connection per source.  Each source
+authenticates with its own `api_key` (falling back to the AISSTREAM_API_KEY
+setting) and subscribes to bounding boxes derived from lat/lon/distance or
+the enablement geo filter.
 
 Message flow:
   aisstream.io WS → _handle_message → _emit_position → ais_to_cot → tx_queue
@@ -19,8 +20,9 @@ from datetime import datetime
 
 import websockets
 
-from app.enablements.base import EnablementStats, emit_cot
+from app.core.config import settings
 from app.enablements.ais.converter import ais_to_cot
+from app.enablements.base import EnablementStats, emit_cot
 
 log = logging.getLogger(__name__)
 
@@ -32,6 +34,22 @@ _POSITION_MESSAGE_TYPES = frozenset(
         "LongRangeAisBroadcastMessage",
     }
 )
+
+
+# Values the `endpoint` column takes for every source type; anything else in
+# that column is a legacy AIS API key stored before `api_key` existed.
+_ENDPOINT_MODES = frozenset({"", "geo", "point", "mil"})
+
+
+def _resolve_api_key(source: dict) -> str:
+    """Source key → legacy key in `endpoint` → AISSTREAM_API_KEY setting."""
+    key = (source.get("api_key") or "").strip()
+    if key:
+        return key
+    legacy = (source.get("endpoint") or "").strip()
+    if legacy and legacy not in _ENDPOINT_MODES:
+        return legacy
+    return (settings.aisstream_api_key or "").strip()
 
 
 def _bbox_from_center(lat: float, lon: float, distance_km: float) -> list:
@@ -135,10 +153,13 @@ class AisWorker:
     async def _stream_source(self, source: dict) -> None:
         name = source.get("name", "unknown")
         ws_url = source.get("base_url") or "wss://stream.aisstream.io/v0/stream"
-        api_key = "f199a8a73fc54f221e6af34d45d9129b58c26594"  # (source.get("endpoint") or "").strip()
+        api_key = _resolve_api_key(source)
 
         if not api_key:
-            log.error("[%s] No API key — set it in the source 'endpoint' field", name)
+            log.error(
+                "[%s] No aisstream.io API key — set one on the source or via AISSTREAM_API_KEY",
+                name,
+            )
             await asyncio.sleep(30)
             return
 
