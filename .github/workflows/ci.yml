@@ -65,7 +65,10 @@ jobs:
             sleep 1
           done
           curl -fsS http://127.0.0.1:8000/api/v1/enablement-types
-          test "$(docker exec takdata id -u)" = "1001"
+          # `docker exec` runs as root; check the server process (PID 1) and
+          # the volume it now owns instead.
+          test "$(docker exec takdata sh -c "grep '^Uid:' /proc/1/status | cut -f2")" = "1001"
+          test "$(docker exec takdata stat -c %u /app/data/config.db)" = "1001"
 
       - name: Container logs
         if: always()
