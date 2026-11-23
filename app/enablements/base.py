@@ -21,10 +21,39 @@ from typing import ClassVar, Optional
 class EnablementStats:
     """Live metrics exposed via GET /status and WS /ws/status."""
     events_sent: int = 0
+    events_dropped: int = 0
     last_poll_time: Optional[datetime] = None
     last_error: Optional[str] = None
     active_items: int = 0  # aircraft count, vessel count, etc.
     source_stats: dict = field(default_factory=dict)  # per-source breakdown
+
+
+async def emit_cot(
+    queue: asyncio.Queue, data: bytes, stats: EnablementStats
+) -> bool:
+    """Push CoT onto the TX queue without blocking, dropping the oldest if full.
+
+    A dead pytak TX worker leaves the queue permanently full. A plain
+    `await queue.put()` then blocks the producer forever: its stats freeze at
+    whatever the queue swallowed and the UI reports a live feed sending nothing.
+    Dropping the oldest event keeps the worker running and the drop visible in
+    stats — the newest position report is the one worth keeping anyway.
+
+    Returns True if the event was queued.
+    """
+    if queue.full():
+        try:
+            queue.get_nowait()
+            stats.events_dropped += 1
+        except asyncio.QueueEmpty:
+            pass
+    try:
+        queue.put_nowait(data)
+    except asyncio.QueueFull:
+        stats.events_dropped += 1
+        return False
+    stats.events_sent += 1
+    return True
 
 
 class EnablementPlugin(ABC):
@@ -38,8 +67,8 @@ class EnablementPlugin(ABC):
       4. Stats:       plugin.get_stats()          (polled by WebSocket broadcaster)
       5. Hot-reload:  await plugin.on_config_updated(new_config)
 
-    All CoT bytes are pushed to self.tx_queue:
-      await self.tx_queue.put(cot_bytes)
+    All CoT bytes are pushed to self.tx_queue via the non-blocking helper:
+      await emit_cot(self.tx_queue, cot_bytes, stats)
     """
 
     TYPE_ID: ClassVar[str] = ""

@@ -18,7 +18,7 @@ import math
 import random
 from datetime import datetime, timezone
 
-from app.enablements.base import EnablementStats
+from app.enablements.base import EnablementStats, emit_cot
 from app.enablements.synthetic.generator import synthetic_to_cot
 
 log = logging.getLogger(__name__)
@@ -108,8 +108,7 @@ class SyntheticWorker:
                 for feature in self.features:
                     try:
                         cot_bytes = synthetic_to_cot(feature, self.config)
-                        await self.tx_queue.put(cot_bytes)
-                        self.stats.events_sent += 1
+                        await emit_cot(self.tx_queue, cot_bytes, self.stats)
                     except Exception as exc:
                         self.stats.last_error = str(exc)
                         log.exception("synthetic seed emit failed")
@@ -122,8 +121,7 @@ class SyntheticWorker:
                     feature["lon"] += self.rng.uniform(-JITTER_DEG, JITTER_DEG)
                     try:
                         cot_bytes = synthetic_to_cot(feature, self.config)
-                        await self.tx_queue.put(cot_bytes)
-                        self.stats.events_sent += 1
+                        await emit_cot(self.tx_queue, cot_bytes, self.stats)
                     except Exception as exc:
                         self.stats.last_error = str(exc)
                         log.exception("synthetic emit failed")
