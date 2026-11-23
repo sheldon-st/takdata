@@ -5,7 +5,6 @@ AIS → Cursor on Target (CoT) XML conversion.
 import logging
 import xml.etree.ElementTree as ET
 from configparser import SectionProxy
-from typing import Optional, Union
 
 import pytak
 
@@ -29,26 +28,26 @@ NAV_STATUS = {
 def _ship_type_to_cot(ship_type: int) -> str:
     """Map AIS ship type code to a CoT type string."""
     if ship_type == 35:
-        return "a-f-S-X-M"        # Military ops
+        return "a-f-S-X-M"  # Military ops
     if ship_type in (51,):
-        return "a-f-S-X-L-O-R"    # Search and rescue
+        return "a-f-S-X-L-O-R"  # Search and rescue
     if 30 <= ship_type <= 34:
-        return "a-n-S-X-L"        # Fishing / towing / dredging
+        return "a-n-S-X-L"  # Fishing / towing / dredging
     if 50 <= ship_type <= 59:
-        return "a-f-S-X-L"        # Port, pilot, tender
+        return "a-f-S-X-L"  # Port, pilot, tender
     if 60 <= ship_type <= 69:
-        return "a-n-S-X-L-O-V"    # Passenger
+        return "a-n-S-X-L-O-V"  # Passenger
     if 70 <= ship_type <= 79:
-        return "a-n-S-X-L-O-V"    # Cargo
+        return "a-n-S-X-L-O-V"  # Cargo
     if 80 <= ship_type <= 89:
         return "a-n-S-X-L-O-W-T"  # Tanker
-    return "a-n-S-X-L"            # Default surface vessel
+    return "a-n-S-X-L"  # Default surface vessel
 
 
 def ais_to_cot_xml(
     vessel: dict,
-    config: Union[SectionProxy, dict, None] = None,
-) -> Optional[ET.Element]:
+    config: SectionProxy | dict | None = None,
+) -> ET.Element | None:
     """
     Serialize AIS vessel data as a CoT XML Element.
 
@@ -81,8 +80,8 @@ def ais_to_cot_xml(
     destination = str(vessel.get("Destination", "")).strip()
     nav_status = int(vessel.get("NavigationalStatus", 15) or 15)
 
-    sog = float(vessel.get("Sog", 0.0) or 0.0)          # knots
-    cog = float(vessel.get("Cog", 0.0) or 0.0)          # degrees
+    sog = float(vessel.get("Sog", 0.0) or 0.0)  # knots
+    cog = float(vessel.get("Cog", 0.0) or 0.0)  # degrees
     true_heading = int(vessel.get("TrueHeading", 511) or 511)  # 511 = not available
 
     course = cog if true_heading == 511 else float(true_heading)
@@ -161,8 +160,8 @@ def ais_to_cot_xml(
 
 def ais_to_cot(
     vessel: dict,
-    config: Union[SectionProxy, dict, None] = None,
-) -> Optional[bytes]:
+    config: SectionProxy | dict | None = None,
+) -> bytes | None:
     """Convert an AIS vessel dict to CoT XML bytes. Returns None if skipped."""
     cot = ais_to_cot_xml(vessel, config)
     if cot is None:

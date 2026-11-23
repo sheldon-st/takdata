@@ -14,23 +14,22 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import ClassVar, Optional
+from typing import ClassVar
 
 
 @dataclass
 class EnablementStats:
     """Live metrics exposed via GET /status and WS /ws/status."""
+
     events_sent: int = 0
     events_dropped: int = 0
-    last_poll_time: Optional[datetime] = None
-    last_error: Optional[str] = None
+    last_poll_time: datetime | None = None
+    last_error: str | None = None
     active_items: int = 0  # aircraft count, vessel count, etc.
     source_stats: dict = field(default_factory=dict)  # per-source breakdown
 
 
-async def emit_cot(
-    queue: asyncio.Queue, data: bytes, stats: EnablementStats
-) -> bool:
+async def emit_cot(queue: asyncio.Queue, data: bytes, stats: EnablementStats) -> bool:
     """Push CoT onto the TX queue without blocking, dropping the oldest if full.
 
     A dead pytak TX worker leaves the queue permanently full. A plain

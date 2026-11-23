@@ -5,7 +5,6 @@ Certs live under data/certs/ as {cert_id}_{original}.p12; see FileStore.
 """
 
 from pathlib import Path
-from typing import Optional
 
 from app.services.file_store import FileStore
 
@@ -20,7 +19,7 @@ def list_certs(certs_dir: Path) -> list[dict]:
     return sorted(certs, key=lambda c: c["filename"].lower())
 
 
-def cert_path_for_id(certs_dir: Path, cert_id: str) -> Optional[Path]:
+def cert_path_for_id(certs_dir: Path, cert_id: str) -> Path | None:
     return _store(certs_dir).path_for(cert_id)
 
 
@@ -34,7 +33,7 @@ def delete_cert(certs_dir: Path, cert_id: str) -> bool:
     return _store(certs_dir).delete(cert_id)
 
 
-def resolve_cert_path(certs_dir: Path, cert_path_or_id: str) -> Optional[str]:
+def resolve_cert_path(certs_dir: Path, cert_path_or_id: str) -> str | None:
     """
     Resolve a stored cert reference to an absolute path suitable for pytak.
 

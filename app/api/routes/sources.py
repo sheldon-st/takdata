@@ -98,6 +98,7 @@ async def remove_source(
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 async def _require_enablement(db: aiosqlite.Connection, enablement_id: int) -> dict:
     row = await get_enablement(db, enablement_id)
     if not row:
@@ -105,9 +106,7 @@ async def _require_enablement(db: aiosqlite.Connection, enablement_id: int) -> d
     return row
 
 
-async def _require_source(
-    db: aiosqlite.Connection, enablement_id: int, source_id: int
-) -> dict:
+async def _require_source(db: aiosqlite.Connection, enablement_id: int, source_id: int) -> dict:
     await _require_enablement(db, enablement_id)
     row = await get_source(db, enablement_id, source_id)
     if not row:

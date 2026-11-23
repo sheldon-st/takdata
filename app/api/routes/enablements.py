@@ -44,6 +44,7 @@ router = APIRouter(tags=["Enablements"])
 # Enablement type catalog
 # ---------------------------------------------------------------------------
 
+
 @router.get("/enablement-types", response_model=list[EnablementTypeInfo])
 async def get_enablement_types(_: dict = Depends(require_viewer)):
     """List all registered enablement plugin types."""
@@ -53,6 +54,7 @@ async def get_enablement_types(_: dict = Depends(require_viewer)):
 # ---------------------------------------------------------------------------
 # Enablement CRUD
 # ---------------------------------------------------------------------------
+
 
 @router.get("/enablements", response_model=list[EnablementResponse])
 async def get_enablements(
@@ -134,6 +136,7 @@ async def del_enablement(
 # Start / Stop
 # ---------------------------------------------------------------------------
 
+
 @router.post("/enablements/{enablement_id}/start")
 async def start_enablement(
     enablement_id: int,
@@ -182,6 +185,7 @@ async def stop_enablement(
 # Plugin-specific known sources (for UI "add from template")
 # ---------------------------------------------------------------------------
 
+
 @router.get("/enablements/{enablement_id}/known-sources")
 async def known_sources(
     enablement_id: int,
@@ -204,6 +208,7 @@ async def known_sources(
 # ---------------------------------------------------------------------------
 # Helper
 # ---------------------------------------------------------------------------
+
 
 def _enrich(row: dict, runtime: RuntimeManager) -> dict:
     """Attach live 'running' flag to a DB row before returning."""

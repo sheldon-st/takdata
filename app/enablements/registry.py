@@ -10,14 +10,12 @@ Usage:
         ...
 """
 
-from typing import Type
-
 from app.enablements.base import EnablementPlugin
 
-_REGISTRY: dict[str, Type[EnablementPlugin]] = {}
+_REGISTRY: dict[str, type[EnablementPlugin]] = {}
 
 
-def register(cls: Type[EnablementPlugin]) -> Type[EnablementPlugin]:
+def register(cls: type[EnablementPlugin]) -> type[EnablementPlugin]:
     """Class decorator to register an EnablementPlugin subclass."""
     if not cls.TYPE_ID:
         raise ValueError(f"EnablementPlugin subclass {cls.__name__} must define TYPE_ID")
@@ -25,11 +23,10 @@ def register(cls: Type[EnablementPlugin]) -> Type[EnablementPlugin]:
     return cls
 
 
-def get_plugin_class(type_id: str) -> Type[EnablementPlugin]:
+def get_plugin_class(type_id: str) -> type[EnablementPlugin]:
     if type_id not in _REGISTRY:
         raise ValueError(
-            f"Unknown enablement type: '{type_id}'. "
-            f"Registered types: {list(_REGISTRY.keys())}"
+            f"Unknown enablement type: '{type_id}'. Registered types: {list(_REGISTRY.keys())}"
         )
     return _REGISTRY[type_id]
 

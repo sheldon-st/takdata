@@ -14,8 +14,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 # Import enablements package to populate the plugin registry
-import app.enablements  # noqa: F401
-
+import app.enablements
 from app.api.deps import get_current_user
 from app.api.routes import certs, enablements, packages, sources, status, tak_config
 from app.core.config import settings

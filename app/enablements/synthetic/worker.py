@@ -16,7 +16,7 @@ import asyncio
 import logging
 import math
 import random
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.enablements.base import EnablementStats, emit_cot
 from app.enablements.synthetic.generator import synthetic_to_cot
@@ -97,10 +97,13 @@ class SyntheticWorker:
     async def run(self) -> None:
         interval = 1.0 / self.U
         log.info(
-            "Synthetic harness: N=%d U=%.2fHz K=%d strategy=%s "
-            "→ %.1f events/s, refresh ~%.2fs",
-            self.N, self.U, self.K, self.strategy,
-            self.U * self.K, self.N / (self.U * self.K),
+            "Synthetic harness: N=%d U=%.2fHz K=%d strategy=%s → %.1f events/s, refresh ~%.2fs",
+            self.N,
+            self.U,
+            self.K,
+            self.strategy,
+            self.U * self.K,
+            self.N / (self.U * self.K),
         )
         try:
             if self.seed_initial:
@@ -112,7 +115,7 @@ class SyntheticWorker:
                     except Exception as exc:
                         self.stats.last_error = str(exc)
                         log.exception("synthetic seed emit failed")
-                self.stats.last_poll_time = datetime.now(timezone.utc)
+                self.stats.last_poll_time = datetime.now(UTC)
             while True:
                 tick_start = asyncio.get_event_loop().time()
                 for i in self._pick_indices():
@@ -125,7 +128,7 @@ class SyntheticWorker:
                     except Exception as exc:
                         self.stats.last_error = str(exc)
                         log.exception("synthetic emit failed")
-                self.stats.last_poll_time = datetime.now(timezone.utc)
+                self.stats.last_poll_time = datetime.now(UTC)
                 # Sleep remainder of the tick to hold cadence even when K is large.
                 elapsed = asyncio.get_event_loop().time() - tick_start
                 await asyncio.sleep(max(0.0, interval - elapsed))

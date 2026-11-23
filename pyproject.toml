@@ -1,0 +1,67 @@
+[project]
+name = "takdata"
+version = "1.0.0"
+description = "Control plane for streaming live ADS-B, AIS and synthetic tracks into a TAK Server as Cursor-on-Target."
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [{ name = "Stephen Sheldon" }]
+keywords = ["tak", "atak", "cursor-on-target", "cot", "ads-b", "ais", "fastapi"]
+classifiers = [
+    "Framework :: FastAPI",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: GIS",
+]
+dependencies = [
+    "aiohttp>=3.9",
+    "aiosqlite>=0.20",
+    "aircot>=4.0",
+    "cryptography>=42",
+    "fastapi>=0.115",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "pytak>=7.0",
+    "python-multipart>=0.0.9",
+    "uvicorn[standard]>=0.30",
+    "websockets>=12.0",
+]
+
+[project.urls]
+Repository = "https://github.com/sheldon-st/takdata"
+Frontend = "https://github.com/sheldon-st/takdata-frontend"
+
+[dependency-groups]
+dev = [
+    "httpx2>=0.1",
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.8",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "ASYNC", "SIM", "DTZ", "RUF"]
+ignore = [
+    "B008",   # FastAPI Depends() in argument defaults is idiomatic
+    "RUF001", # ambiguous unicode in strings (intentional em dashes / arrows)
+    "RUF002",
+    "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"app/enablements/adsb/fetcher.py" = ["E501"] # browser User-Agent strings
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

@@ -1,7 +1,7 @@
 """FastAPI dependency functions."""
 
 import re
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 import aiosqlite
 from fastapi import Depends, HTTPException
