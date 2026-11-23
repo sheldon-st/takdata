@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 # Import enablements package to populate the plugin registry
 import app.enablements
+from app import __version__
 from app.api.deps import get_current_user
 from app.api.routes import certs, enablements, packages, sources, status, tak_config
 from app.core.config import settings
@@ -48,16 +49,17 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="TAK Manager API",
     description=(
-        "Backend API for managing TAK server data enablements. "
-        "Supports ADS-B aircraft tracking with a plugin architecture for future data types."
+        "Control plane for streaming live data into a TAK Server as Cursor-on-Target. "
+        "Plugin-based enablements cover ADS-B aircraft, AIS vessels and a synthetic "
+        "load-test harness."
     ),
-    version="1.0.0",
+    version=__version__,
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
 )
 
-# CORS — allow all origins by default; tighten via CORS_ORIGINS env var for production
+# CORS — only needed when the UI is served from a different origin than /api.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -82,6 +84,12 @@ async def root():
         "docs": "/docs",
         "status": "/api/v1/status",
     }
+
+
+@app.get("/healthz", include_in_schema=False)
+async def healthz():
+    """Liveness probe for container orchestration. Unauthenticated by design."""
+    return {"status": "ok", "version": __version__}
 
 
 @app.get(f"{PREFIX}/me", tags=["Auth"])

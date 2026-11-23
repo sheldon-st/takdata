@@ -111,3 +111,9 @@ def test_tak_config_never_returns_password(client):
     assert resp.status_code == 200
     assert "cert_password" not in resp.json()
     assert client.get("/api/v1/tak/config").json()["cot_url"] == "tls://tak:8089"
+
+
+def test_healthz_needs_no_auth(authed_client):
+    resp = authed_client.get("/healthz")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ok"
