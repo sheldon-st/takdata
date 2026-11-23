@@ -1,6 +1,13 @@
-# TAK Manager — VPS Deployment Guide
+# Deploying TAK Manager
 
-Deploy the TAK Manager backend on a VPS using the prebuilt image from GHCR. Frontend is deployed separately from the [`takdata-frontend`](../takdata-frontend) repo.
+TAK Manager runs as two containers: the **backend** (this repo) and the
+**frontend** ([takdata-frontend](https://github.com/sheldon-st/takdata-frontend)).
+The reference deployment is a [Dokploy](https://dokploy.com) Compose
+application on a VPS, with Dokploy's Traefik handling TLS and an
+[Authentik](https://goauthentik.io) forward-auth middleware handling login.
+
+The compose file lives in the frontend repo:
+[`docker-compose.yml`](https://github.com/sheldon-st/takdata-frontend/blob/main/docker-compose.yml).
 
 ---
 
@@ -10,187 +17,131 @@ Deploy the TAK Manager backend on a VPS using the prebuilt image from GHCR. Fron
 Internet :443
   │
   ▼
-┌─────────────────────────────────────────┐
-│ Traefik / nginx / Caddy                 │
-│ • TLS termination                       │
-│ • routes Host + PathPrefix              │
-│ • (optional) Authentik forward-auth     │
-└────────┬────────────────────┬───────────┘
-         │ Host(data...)      │ Host(data...) && PathPrefix(/api)
-         ▼                    ▼
-┌──────────────────┐  ┌──────────────────┐
-│  takdata-frontend │  │  takdata backend │
-│  (Next.js :3000)  │  │  (FastAPI :8000) │
-└──────────────────┘  └────────┬─────────┘
-                                │
-                                ▼
-                          tak-data volume
-                          (SQLite + certs)
+┌────────────────────────────────────────────────────────┐
+│ Traefik (managed by Dokploy)                           │
+│ • TLS (Let's Encrypt)                                  │
+│ • authentik-fwd middleware on both routers             │
+│ • Host(data.opengeo.space) && PathPrefix(/api) → API   │
+│ • Host(data.opengeo.space)                     → UI    │
+└──────────────┬──────────────────────────┬──────────────┘
+               │ /api/*                   │ everything else
+               ▼                          ▼
+     ┌────────────────────┐     ┌────────────────────┐
+     │ backend  :8000     │     │ frontend :3000     │
+     │ FastAPI + workers  │     │ Next.js standalone │
+     │ tak-data volume    │     └────────────────────┘
+     └─────────┬──────────┘
+               │ CoT over TLS (client .p12)
+               ▼
+          TAK Server
 ```
 
-`data.opengeo.space/api/*` → backend; everything else → frontend.
+UI and API share one origin, so the browser needs no CORS and the Authentik
+session cookie covers both. Neither container binds a host port; both join
+the external `dokploy-network`.
 
 ---
 
 ## Prerequisites
 
-- VPS with Docker (Ubuntu 22.04+ / Debian 12+; amd64 or arm64 — image is multi-arch).
-- DNS `A` record for your public hostname.
-- A reverse proxy of your choice (Traefik/Dokploy, nginx, Caddy) handling TLS.
-- (Optional) Authentik for SSO — see [Auth modes](#auth-modes).
+- A VPS with Dokploy installed.
+- DNS `A` record for `data.opengeo.space` → VPS IP.
+- An Authentik outpost exposed to Traefik as the `authentik-fwd@docker`
+  middleware, with an application whose users belong to
+  `tak-manager-admin` (read/write) or `tak-manager-viewer` (read-only).
+- GHCR images public, or Dokploy registry credentials for `ghcr.io/sheldon-st`.
 
 ---
 
-## 1. Install Docker
+## 1. Create the Compose application
+
+In Dokploy: **Projects → New Application → Compose**.
+
+- **Source:** Git → `https://github.com/sheldon-st/takdata-frontend`, branch
+  `main`, compose path `docker-compose.yml`.
+- **Environment:**
+
+  ```dotenv
+  LOG_LEVEL=INFO
+  AUTH_ENABLED=true
+  # Optional: default key for AIS sources without their own
+  AISSTREAM_API_KEY=
+  ```
+
+- **Deploy.** Routing comes from the Traefik labels in the compose file, so
+  the Domains tab can stay empty.
+
+## 2. Verify
 
 ```bash
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER
-newgrp docker
+curl -I https://data.opengeo.space                   # 302 to Authentik when signed out
+docker inspect --format '{{.State.Health.Status}}' <backend-container>   # healthy
 ```
+
+Sign in, open **TAK Settings**, upload the client `.p12`, set the CoT URL
+and connect. The sidebar pill turns green once the TLS session is up.
 
 ---
 
-## 2. Pull and run the backend
+## Running without Authentik
 
-```bash
-mkdir -p ~/tak-manager && cd ~/tak-manager
-curl -fsSL https://raw.githubusercontent.com/sheldon-st/takdata/main/.env.example -o .env
-nano .env
+For a private LAN or tailnet, drop the `authentik-fwd@docker` middleware
+labels and set `AUTH_ENABLED=false`. Every caller is then treated as admin.
 
-docker pull ghcr.io/sheldon-st/takdata:latest
-docker run -d \
-  --name takdata \
-  --restart unless-stopped \
-  -p 127.0.0.1:8001:8000 \
-  -v tak-data:/app/data \
-  --env-file .env \
-  ghcr.io/sheldon-st/takdata:latest
-```
+> **Warning:** with `AUTH_ENABLED=false` anyone who can reach the host has
+> full control, including uploading certs and pointing feeds at your TAK
+> server. Only do this behind a firewall or VPN.
 
-| Variable | Default | Notes |
-|----------|---------|-------|
-| `LOG_LEVEL` | `INFO` | `DEBUG` for troubleshooting |
-| `CORS_ORIGINS` | `["https://data.opengeo.space"]` | Frontend origin |
-| `AUTH_ENABLED` | `true` | Set `false` to skip Authentik header check |
-
-Bind to `127.0.0.1:8001` so only the reverse proxy can reach it.
-
----
-
-## 3. Front it with a reverse proxy
-
-### Traefik / Dokploy
-
-Two routers on the same host:
-
-| Router | Rule | Service port | Middleware |
-|--------|------|--------------|------------|
-| frontend | `Host(\`data.opengeo.space\`)` | `3000` (frontend container) | `authentik-fwd@docker` (optional) |
-| backend | `Host(\`data.opengeo.space\`) && PathPrefix(\`/api\`)` (priority 100) | `8000` (backend container) | `authentik-fwd@docker` (optional) |
-
-Let's Encrypt resolver on `websecure` handles certs.
-
-### nginx (minimal)
-
-```nginx
-server {
-  listen 443 ssl http2;
-  server_name data.opengeo.space;
-
-  location /api/ {
-    proxy_pass http://127.0.0.1:8001;
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "upgrade";
-    proxy_set_header Host $host;
-  }
-
-  location / {
-    proxy_pass http://127.0.0.1:3001;   # frontend
-    proxy_set_header Host $host;
-  }
-}
-```
-
----
-
-## Auth modes
-
-### Authentik forward-auth (default)
-
-Attach `authentik-fwd@docker` (or your equivalent forward-auth middleware) to both routers. Authentik injects `x-authentik-username` and `x-authentik-groups` headers; the backend reads them. Group `tak-manager-admin` → admin, `tak-manager-viewer` → read-only.
-
-### No auth — private LAN
-
-For trusted single-operator deploys, set `AUTH_ENABLED=false` in `.env` and skip the forward-auth middleware. Backend treats every caller as admin.
-
-> ⚠️ **No auth = full admin to anyone with network reach.** Only run this behind a firewall, VPN, or Tailscale — never on a public address.
-
-The frontend auto-detects this mode via `GET /api/v1/me` (response includes `auth_enabled: false`) and hides the Authentik sign-out link.
+With auth **on**, the backend trusts the `x-authentik-*` headers it
+receives. Keep port 8000 unreachable except through Traefik.
 
 ---
 
 ## Updating
 
-```bash
-docker pull ghcr.io/sheldon-st/takdata:latest
-docker rm -f takdata
-# re-run the `docker run` from step 2 — the `tak-data` volume is preserved
-```
+Every push to `main` publishes `latest` and `sha-<short>` images for both
+repos; tags `vX.Y.Z` publish `X.Y.Z` and `X.Y`. In Dokploy, click
+**Redeploy** (or enable auto-deploy with a webhook). Pin a version tag in
+the compose file for repeatable rollbacks.
+
+The backend image runs as uid 1001. On first start after upgrading from a
+root-run image, its entrypoint chowns the `tak-data` volume automatically.
 
 ---
 
-## Logs
+## Data & backups
+
+The `tak-data` volume holds all state:
+
+| Path        | Contents                                 |
+| ----------- | ---------------------------------------- |
+| `config.db` | SQLite: TAK config, enablements, sources |
+| `certs/`    | Uploaded `.p12` client certificates      |
+| `packages/` | Uploaded TAK data packages               |
 
 ```bash
-docker logs -f takdata
+# Backup (find the real volume name with `docker volume ls`)
+docker run --rm -v <project>_tak-data:/data -v "$PWD":/backup \
+  alpine tar czf /backup/tak-data.tar.gz -C /data .
+
+# Restore
+docker run --rm -v <project>_tak-data:/data -v "$PWD":/backup \
+  alpine tar xzf /backup/tak-data.tar.gz -C /data
 ```
 
----
-
-## Data persistence
-
-All state lives in the `tak-data` named volume:
-
-- `config.db` — SQLite (config, enablements, sources)
-- `certs/` — uploaded `.p12` client certs
-- `packages/` — uploaded TAK data packages
-
-**Backup**
-
-```bash
-docker run --rm \
-  -v tak-data:/data \
-  -v "$PWD":/backup \
-  alpine tar czf /backup/tak-data-backup.tar.gz /data
-```
-
-**Restore**
-
-```bash
-docker run --rm \
-  -v tak-data:/data \
-  -v "$PWD":/backup \
-  alpine tar xzf /backup/tak-data-backup.tar.gz -C /
-```
-
----
-
-## CI/CD
-
-`git push main` → GitHub Actions builds and publishes `ghcr.io/sheldon-st/takdata:latest` and `:sha-<commit>` (linux/amd64 + linux/arm64). Pin a specific tag in production by swapping `:latest` for `:sha-<commit>` in the `docker run` command.
+The DB stores the `.p12` password and source API keys in plain text, so
+treat backups as secrets.
 
 ---
 
 ## Troubleshooting
 
-**Backend won't start** — `docker logs takdata`. Usually volume perms or corrupt SQLite under `data/`.
-
-**401 on every request** — `AUTH_ENABLED=true` but forward-auth middleware not attached to the backend router. Either fix the middleware wiring or set `AUTH_ENABLED=false` (LAN only).
-
-**WebSocket "Reconnecting…"** — reverse proxy not forwarding upgrade headers on `/api/v1/ws/*`. Confirm `Upgrade` / `Connection` headers pass through and that the backend router matches the WS path.
-
-**502 from proxy** — container not running or not bound to the expected loopback port. `docker ps` and `ss -tlnp | grep 8001`.
-
-**Cannot pull image (403)** — package private. Make it public or `docker login ghcr.io` with a PAT having `read:packages`.
+| Symptom                               | Check                                                                                        |
+| ------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Traefik 404                           | Router labels match the host; both services are on `dokploy-network`.                        |
+| `401` from every `/api` call          | Authentik middleware isn't attached to the API router, or the outpost isn't sending headers. |
+| `403 Insufficient permissions`        | User isn't in `tak-manager-admin` or `tak-manager-viewer`.                                   |
+| "Reconnecting to live status…" banner | WebSocket `/api/v1/ws/status` blocked; check the backend logs and the API router.            |
+| TAK pill stays grey                   | `connect_error` on `GET /api/v1/status` says why (bad cert password, TLS alert, refused).    |
+| `events_dropped` climbing             | TAK link is down or slower than the feed; the supervisor reconnects automatically.           |
+| Cannot pull image (403)               | Make the GHCR package public or add registry credentials in Dokploy.                         |
