@@ -8,62 +8,54 @@ Routes:
   DELETE /packages/{package_id} — delete a package
 """
 
-import logging
+import io
+import zipfile
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from app.api.deps import require_admin, require_viewer
+from app.api.uploads import read_upload
 from app.core.config import settings
+from app.models.schemas import PackageInfo
 from app.services.package_service import (
     delete_package,
     list_packages,
+    package_download_name,
     package_path_for_id,
     save_package,
 )
 
-log = logging.getLogger(__name__)
 router = APIRouter(prefix="/packages", tags=["Packages"])
 
 _MAX_PACKAGE_SIZE = 100 * 1024 * 1024  # 100 MB
 
 
-@router.get("", response_model=list[dict])
+@router.get("", response_model=list[PackageInfo])
 async def get_packages(_: dict = Depends(require_viewer)):
     return list_packages(settings.packages_dir)
 
 
-@router.post("", response_model=dict, status_code=201)
+@router.post("", response_model=PackageInfo, status_code=201)
 async def upload_package(
     file: UploadFile,
     _: dict = Depends(require_admin),
 ):
-    if not file.filename or not file.filename.endswith(".zip"):
-        raise HTTPException(status_code=400, detail="Only .zip files are accepted")
-
-    data = await file.read()
-    if len(data) > _MAX_PACKAGE_SIZE:
-        raise HTTPException(status_code=413, detail="File too large (max 100 MB)")
-    if len(data) == 0:
-        raise HTTPException(status_code=400, detail="Empty file")
-
-    return await save_package(settings.packages_dir, file.filename, data)
+    data = await read_upload(file, suffix=".zip", max_bytes=_MAX_PACKAGE_SIZE)
+    if not zipfile.is_zipfile(io.BytesIO(data)):
+        raise HTTPException(status_code=400, detail="File is not a valid zip archive")
+    return save_package(settings.packages_dir, file.filename, data)
 
 
 @router.get("/{package_id}")
 async def download_package(package_id: str, _: dict = Depends(require_viewer)):
     path = package_path_for_id(settings.packages_dir, package_id)
-    if not path or not path.exists():
+    if not path:
         raise HTTPException(status_code=404, detail="Package not found")
-
-    # Recover original filename from the stored name
-    _, _, original = path.stem.partition("_")
-    download_name = original + ".zip" if original else path.name
-
     return FileResponse(
         path=path,
         media_type="application/zip",
-        filename=download_name,
+        filename=package_download_name(settings.packages_dir, path),
     )
 
 
