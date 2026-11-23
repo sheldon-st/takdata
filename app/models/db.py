@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS sources (
     lat             REAL,
     lon             REAL,
     distance        REAL             DEFAULT 25.0,
+    api_key         TEXT,
     enabled         INTEGER NOT NULL DEFAULT 1,
     created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
 );
@@ -88,6 +89,8 @@ _GEO_FILTER_MIGRATIONS = [
     # Drop deprecated v1 cols (SQLite 3.35+)
     "ALTER TABLE enablements DROP COLUMN entity_count",
     "ALTER TABLE enablements DROP COLUMN target_rate_hz",
+    # Per-source credentials (AIS stream API key)
+    "ALTER TABLE sources ADD COLUMN api_key TEXT",
 ]
 
 

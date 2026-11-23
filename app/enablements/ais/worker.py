@@ -1,9 +1,10 @@
 """
 AIS WebSocket worker for aisstream.io.
 
-Maintains one persistent WebSocket connection per source.  Each source is
-identified by its API key (stored in the `endpoint` field) and geographic
-bounding boxes derived from lat/lon/distance or the enablement geo filter.
+Maintains one persistent WebSocket connection per source.  Each source
+authenticates with its own `api_key` (falling back to the AISSTREAM_API_KEY
+setting) and subscribes to bounding boxes derived from lat/lon/distance or
+the enablement geo filter.
 
 Message flow:
   aisstream.io WS → _handle_message → _emit_position → ais_to_cot → tx_queue
@@ -19,8 +20,9 @@ from datetime import datetime
 
 import websockets
 
-from app.enablements.base import EnablementStats, emit_cot
+from app.core.config import settings
 from app.enablements.ais.converter import ais_to_cot
+from app.enablements.base import EnablementStats, emit_cot
 
 log = logging.getLogger(__name__)
 
@@ -34,13 +36,32 @@ _POSITION_MESSAGE_TYPES = frozenset(
 )
 
 
-def _bbox_from_center(lat: float, lon: float, distance_km: float) -> list:
+_NM_TO_KM = 1.852
+
+# Values the `endpoint` column takes for every source type; anything else in
+# that column is a legacy AIS API key stored before `api_key` existed.
+_ENDPOINT_MODES = frozenset({"", "geo", "point", "mil"})
+
+
+def _resolve_api_key(source: dict) -> str:
+    """Source key → legacy key in `endpoint` → AISSTREAM_API_KEY setting."""
+    key = (source.get("api_key") or "").strip()
+    if key:
+        return key
+    legacy = (source.get("endpoint") or "").strip()
+    if legacy and legacy not in _ENDPOINT_MODES:
+        return legacy
+    return (settings.aisstream_api_key or "").strip()
+
+
+def _bbox_from_center(lat: float, lon: float, distance_nm: float) -> list:
     """
-    Convert a center point + radius to a bounding box.
+    Convert a center point + radius (nautical miles) to a bounding box.
     Returns [[min_lat, min_lon], [max_lat, max_lon]].
     """
+    distance_km = distance_nm * _NM_TO_KM
     lat_delta = distance_km / 111.0
-    lon_delta = distance_km / (111.0 * math.cos(math.radians(lat)))
+    lon_delta = distance_km / (111.0 * max(math.cos(math.radians(lat)), 0.01))
     return [
         [lat - lat_delta, lon - lon_delta],
         [lat + lat_delta, lon + lon_delta],
@@ -86,6 +107,12 @@ class AisWorker:
         cutoff = now - self._DEFAULT_EMIT_INTERVAL * 10
         self._active_vessels = {
             k: v for k, v in self._active_vessels.items() if v > cutoff
+        }
+        # Drop per-vessel caches for vessels that went quiet so a long-running
+        # global feed doesn't grow these dicts without bound.
+        self._last_sent = {k: v for k, v in self._last_sent.items() if k in self._active_vessels}
+        self._static_data = {
+            k: v for k, v in self._static_data.items() if k in self._active_vessels
         }
         self._stats.active_items = len(self._active_vessels)
         self._stats.source_stats = self._source_stats
@@ -135,10 +162,13 @@ class AisWorker:
     async def _stream_source(self, source: dict) -> None:
         name = source.get("name", "unknown")
         ws_url = source.get("base_url") or "wss://stream.aisstream.io/v0/stream"
-        api_key = "f199a8a73fc54f221e6af34d45d9129b58c26594"  # (source.get("endpoint") or "").strip()
+        api_key = _resolve_api_key(source)
 
         if not api_key:
-            log.error("[%s] No API key — set it in the source 'endpoint' field", name)
+            log.error(
+                "[%s] No aisstream.io API key — set one on the source or via AISSTREAM_API_KEY",
+                name,
+            )
             await asyncio.sleep(30)
             return
 
@@ -180,14 +210,16 @@ class AisWorker:
 
     def _build_bounding_boxes(self, source: dict) -> list:
         """
-        Priority: source lat/lon/distance → enablement geo_filter.
+        Priority: source lat/lon/distance → enablement geo_filter → whole
+        world when the source is in "Global" (`mil`) mode.
         Returns a list of [[min_lat, min_lon], [max_lat, max_lon]] boxes.
         """
         lat = source.get("lat")
         lon = source.get("lon")
         distance = source.get("distance")
+        is_global = (source.get("endpoint") or "").strip() == "mil"
 
-        if lat is not None and lon is not None and distance:
+        if not is_global and lat is not None and lon is not None and distance:
             return [_bbox_from_center(float(lat), float(lon), float(distance))]
 
         mn_lat = self.config.get("geo_filter_min_lat")
@@ -202,6 +234,9 @@ class AisWorker:
                     [float(mx_lat), float(mx_lon)],
                 ]
             ]
+
+        if is_global:
+            return [[[-90.0, -180.0], [90.0, 180.0]]]
 
         return []
 

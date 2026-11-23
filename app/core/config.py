@@ -4,6 +4,7 @@ Operational config (TAK URL, credentials) is stored in SQLite, not here.
 """
 
 from pathlib import Path
+from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -40,6 +41,9 @@ class Settings(BaseSettings):
     # Auth — when False, skip Authentik header check and treat all callers as admin.
     # Intended for private LAN / single-operator deploys without a forward-auth proxy.
     auth_enabled: bool = True
+
+    # Fallback aisstream.io API key for AIS sources that don't set their own.
+    aisstream_api_key: Optional[str] = None
 
 
 settings = Settings()

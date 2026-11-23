@@ -111,7 +111,14 @@ async def _get_sources_for(db: aiosqlite.Connection, enablement_id: int) -> list
             (enablement_id,),
         )
     ).fetchall()
-    return [dict(r) for r in rows]
+    return [_source_row(r) for r in rows]
+
+
+def _source_row(row) -> dict:
+    """Row → dict with a derived has_api_key flag (the key itself stays server-side)."""
+    d = dict(row)
+    d["has_api_key"] = bool(d.get("api_key"))
+    return d
 
 
 async def list_sources(db: aiosqlite.Connection, enablement_id: int) -> list[dict]:
@@ -126,7 +133,7 @@ async def get_source(
         (source_id, enablement_id),
     )
     row = await cursor.fetchone()
-    return dict(row) if row else None
+    return _source_row(row) if row else None
 
 
 async def create_source(
@@ -136,10 +143,10 @@ async def create_source(
     cursor = await db.execute(
         """INSERT INTO sources
                (enablement_id, name, base_url, endpoint, sleep_interval,
-                lat, lon, distance, enabled)
+                lat, lon, distance, api_key, enabled)
            VALUES
                (:enablement_id, :name, :base_url, :endpoint, :sleep_interval,
-                :lat, :lon, :distance, :enabled)""",
+                :lat, :lon, :distance, :api_key, :enabled)""",
         data,
     )
     await db.commit()
