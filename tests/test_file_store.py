@@ -16,7 +16,8 @@ def test_rejects_glob_and_path_ids(value):
 def test_safe_stem_strips_unsafe_characters():
     assert safe_stem("../../etc/pass wd.zip") == "pass_wd"
     assert safe_stem("my pkg.v1.zip") == "my_pkg.v1"
-    assert safe_stem("...zip") == "file"
+    assert safe_stem("....") == "file"
+    assert safe_stem("C:\\Users\\me\\client.p12") == "client"
 
 
 def test_round_trip(tmp_path):
