@@ -17,7 +17,7 @@ from typing import Optional
 
 import aiohttp
 
-from app.enablements.base import EnablementStats
+from app.enablements.base import EnablementStats, emit_cot
 from app.enablements.adsb.converter import adsb_to_cot
 from app.enablements.adsb.fetcher import fetch_adsb_aircraft
 
@@ -224,10 +224,7 @@ class AdsbWorker:
             try:
                 cot_bytes = adsb_to_cot(ac, cot_config)
                 if cot_bytes:
-                    await self.tx_queue.put(cot_bytes)
-                    self._stats.events_sent += 1
-            except asyncio.QueueFull:
-                log.warning("TX queue full — dropping CoT event for %s", ac.get("hex"))
+                    await emit_cot(self.tx_queue, cot_bytes, self._stats)
             except Exception as exc:
                 log.error("[%s] CoT conversion error for %s: %s",
                           source_name, ac.get("hex", "?"), exc)

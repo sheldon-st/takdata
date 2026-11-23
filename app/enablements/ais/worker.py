@@ -19,7 +19,7 @@ from datetime import datetime
 
 import websockets
 
-from app.enablements.base import EnablementStats
+from app.enablements.base import EnablementStats, emit_cot
 from app.enablements.ais.converter import ais_to_cot
 
 log = logging.getLogger(__name__)
@@ -304,8 +304,7 @@ class AisWorker:
         try:
             cot_bytes = ais_to_cot(vessel, cot_config)
             if cot_bytes:
-                await self.tx_queue.put(cot_bytes)
-                self._stats.events_sent += 1
+                await emit_cot(self.tx_queue, cot_bytes, self._stats)
                 self._last_sent[mmsi] = now
                 self._stats.last_poll_time = datetime.utcnow()
 
@@ -313,8 +312,6 @@ class AisWorker:
                 src["last_message"] = datetime.utcnow().isoformat()
                 src["vessel_count"] = len(self._active_vessels)
 
-        except asyncio.QueueFull:
-            log.warning("TX queue full — dropping CoT for MMSI %s", mmsi)
         except Exception as exc:
             log.error("[%s] CoT error for MMSI %s: %s", source_name, mmsi, exc)
             self._stats.last_error = str(exc)

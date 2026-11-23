@@ -8,6 +8,9 @@ Design notes:
       2. clitool.run_tasks()  — schedules them via asyncio.ensure_future()
       3. Enablement plugins receive clitool.tx_queue directly and push CoT bytes to it
       4. disconnect_tak() cancels all running_tasks explicitly
+  - Because pytak never observes its own worker futures, a dead TX worker (SSL alert,
+    dropped socket, rejected client cert) is silent: the tx_queue fills and stays full.
+    _supervise() watches those futures, flips the connection state, and reconnects.
   - Module-level singleton `runtime_manager` is imported by FastAPI routes and lifespan.
 """
 
@@ -24,6 +27,9 @@ from app.enablements.registry import get_plugin_class
 
 log = logging.getLogger(__name__)
 
+# Reconnect backoff in seconds; the last value repeats for as long as it takes.
+RECONNECT_BACKOFF = (5, 10, 20, 40, 60)
+
 
 class RuntimeManager:
     def __init__(self) -> None:
@@ -35,6 +41,12 @@ class RuntimeManager:
 
         # enablement_id (DB row id) -> plugin instance
         self._active_enablements: dict[int, EnablementPlugin] = {}
+        # enablement_id -> (type_id, config), kept so a reconnect can rebuild
+        # every plugin against the new tx_queue
+        self._active_configs: dict[int, tuple[str, dict]] = {}
+
+        self._supervisor: Optional[asyncio.Task] = None
+        self._shutting_down: bool = False
 
     # ------------------------------------------------------------------
     # TAK connection lifecycle
@@ -48,9 +60,15 @@ class RuntimeManager:
           cot_url, cert_path, cert_password, cot_host_id,
           dont_check_hostname, dont_verify, max_out_queue, max_in_queue
         """
-        if self._connected:
+        if self._connected or self._supervisor:
             await self.disconnect_tak()
 
+        self._shutting_down = False
+        await self._open_connection(tak_config)
+        self._supervisor = asyncio.ensure_future(self._supervise())
+
+    async def _open_connection(self, tak_config: dict) -> None:
+        """Build the pytak CLITool and schedule its TX/RX workers."""
         cp = ConfigParser()
         cp["tak"] = {
             "COT_URL": tak_config.get("cot_url", "tls://localhost:8089"),
@@ -64,14 +82,9 @@ class RuntimeManager:
         }
 
         try:
-            self._clitool = pytak.CLITool(cp["tak"])
-            await self._clitool.setup()
-            self._clitool.run_tasks()  # schedules TX + RX workers as asyncio futures
-            self._tx_queue = self._clitool.tx_queue
-            self._connected = True
-            self._connect_error = None
-            self._tak_config = tak_config
-            log.info("Connected to TAK server: %s", tak_config.get("cot_url"))
+            clitool = pytak.CLITool(cp["tak"])
+            await clitool.setup()
+            clitool.run_tasks()  # schedules TX + RX workers as asyncio futures
         except Exception as exc:
             self._connect_error = str(exc)
             self._connected = False
@@ -80,23 +93,121 @@ class RuntimeManager:
             log.error("Failed to connect to TAK server: %s", exc)
             raise
 
+        self._clitool = clitool
+        self._tx_queue = clitool.tx_queue
+        self._connected = True
+        self._connect_error = None
+        self._tak_config = tak_config
+        log.info("Connected to TAK server: %s", tak_config.get("cot_url"))
+
     async def disconnect_tak(self) -> None:
         """Stop all enablements and close the TAK connection."""
+        self._shutting_down = True
+
+        if self._supervisor:
+            self._supervisor.cancel()
+            await asyncio.gather(self._supervisor, return_exceptions=True)
+            self._supervisor = None
+
         # Stop workers first so they don't try to enqueue after queue is gone
         for eid in list(self._active_enablements.keys()):
             await self.stop_enablement(eid)
 
+        await self._teardown_clitool()
+        self._connected = False
+        log.info("Disconnected from TAK server")
+
+    async def _teardown_clitool(self) -> None:
+        """Cancel pytak's TX/RX futures and drop the connection objects."""
         if self._clitool:
-            for task in list(getattr(self._clitool, "running_tasks", [])):
-                task.cancel()
             running = list(getattr(self._clitool, "running_tasks", []))
+            for task in running:
+                task.cancel()
             if running:
                 await asyncio.gather(*running, return_exceptions=True)
 
         self._clitool = None
         self._tx_queue = None
-        self._connected = False
-        log.info("Disconnected from TAK server")
+
+    # ------------------------------------------------------------------
+    # Worker supervision + reconnect
+    # ------------------------------------------------------------------
+
+    async def _supervise(self) -> None:
+        """Watch pytak's TX/RX futures; a dead worker means CoT stops flowing.
+
+        pytak schedules its workers with ensure_future and never awaits them, so a
+        failure (rejected client cert, TLS alert, dropped socket) leaves the future
+        holding an unobserved exception while `tak_connected` still reads true and
+        the tx_queue silently fills.
+        """
+        while not self._shutting_down:
+            tasks = list(getattr(self._clitool, "running_tasks", []))
+            if not tasks:
+                await asyncio.sleep(1.0)
+                continue
+
+            done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            if self._shutting_down:
+                return
+
+            reason = self._describe_failure(done)
+            log.error("TAK connection lost — %s", reason)
+            self._connected = False
+            self._connect_error = reason
+            await self._teardown_clitool()
+
+            if not await self._reconnect():
+                return
+
+    @staticmethod
+    def _describe_failure(done: set) -> str:
+        """Turn finished worker futures into a message worth showing an operator."""
+        parts = []
+        for task in done:
+            worker = getattr(task, "_pytak_worker", None)
+            name = worker.__class__.__name__ if worker is not None else "worker"
+            if task.cancelled():
+                parts.append(f"{name} cancelled")
+                continue
+            exc = task.exception()
+            parts.append(
+                f"{name} failed: {type(exc).__name__}: {exc}" if exc else f"{name} exited"
+            )
+        return "; ".join(parts) or "TAK worker exited"
+
+    async def _reconnect(self) -> bool:
+        """Reconnect with backoff, then rebuild every running enablement.
+
+        Returns False only when shutting down.
+        """
+        attempt = 0
+        while not self._shutting_down:
+            delay = RECONNECT_BACKOFF[min(attempt, len(RECONNECT_BACKOFF) - 1)]
+            attempt += 1
+            await asyncio.sleep(delay)
+            if self._shutting_down:
+                return False
+            try:
+                await self._open_connection(self._tak_config)
+            except Exception as exc:
+                log.warning("Reconnect attempt %d failed: %s", attempt, exc)
+                continue
+            log.info("Reconnected to TAK server after %d attempt(s)", attempt)
+            await self._restart_enablements()
+            return True
+        return False
+
+    async def _restart_enablements(self) -> None:
+        """Re-point every running plugin at the new tx_queue."""
+        for eid, (type_id, config) in list(self._active_configs.items()):
+            plugin = self._active_enablements.pop(eid, None)
+            if plugin:
+                await plugin.stop()
+            try:
+                await self.start_enablement(eid, type_id, config)
+            except Exception as exc:
+                log.error("Reconnect: failed to restart enablement %d: %s", eid, exc)
 
     # ------------------------------------------------------------------
     # Enablement lifecycle
@@ -126,11 +237,13 @@ class RuntimeManager:
         )
         await plugin.start()
         self._active_enablements[enablement_id] = plugin
+        self._active_configs[enablement_id] = (type_id, config)
         log.info("Started enablement %d (%s: %s)", enablement_id, type_id, config.get("name"))
 
     async def stop_enablement(self, enablement_id: int) -> None:
         """Stop and remove a running enablement plugin."""
         plugin = self._active_enablements.pop(enablement_id, None)
+        self._active_configs.pop(enablement_id, None)
         if plugin:
             await plugin.stop()
             log.info("Stopped enablement %d", enablement_id)
@@ -140,6 +253,8 @@ class RuntimeManager:
         plugin = self._active_enablements.get(enablement_id)
         if plugin:
             await plugin.on_config_updated(new_config)
+            type_id, _ = self._active_configs.get(enablement_id, (plugin.TYPE_ID, {}))
+            self._active_configs[enablement_id] = (type_id, new_config)
         else:
             log.debug("restart_enablement: %d not running, ignoring", enablement_id)
 
@@ -163,6 +278,7 @@ class RuntimeManager:
                     "type_id": plugin.TYPE_ID,
                     "running": plugin.is_running,
                     "events_sent": stats.events_sent,
+                    "events_dropped": stats.events_dropped,
                     "last_poll_time": stats.last_poll_time.isoformat() if stats.last_poll_time else None,
                     "last_error": stats.last_error,
                     "active_items": stats.active_items,
