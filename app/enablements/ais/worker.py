@@ -36,6 +36,8 @@ _POSITION_MESSAGE_TYPES = frozenset(
 )
 
 
+_NM_TO_KM = 1.852
+
 # Values the `endpoint` column takes for every source type; anything else in
 # that column is a legacy AIS API key stored before `api_key` existed.
 _ENDPOINT_MODES = frozenset({"", "geo", "point", "mil"})
@@ -52,13 +54,14 @@ def _resolve_api_key(source: dict) -> str:
     return (settings.aisstream_api_key or "").strip()
 
 
-def _bbox_from_center(lat: float, lon: float, distance_km: float) -> list:
+def _bbox_from_center(lat: float, lon: float, distance_nm: float) -> list:
     """
-    Convert a center point + radius to a bounding box.
+    Convert a center point + radius (nautical miles) to a bounding box.
     Returns [[min_lat, min_lon], [max_lat, max_lon]].
     """
+    distance_km = distance_nm * _NM_TO_KM
     lat_delta = distance_km / 111.0
-    lon_delta = distance_km / (111.0 * math.cos(math.radians(lat)))
+    lon_delta = distance_km / (111.0 * max(math.cos(math.radians(lat)), 0.01))
     return [
         [lat - lat_delta, lon - lon_delta],
         [lat + lat_delta, lon + lon_delta],
@@ -104,6 +107,12 @@ class AisWorker:
         cutoff = now - self._DEFAULT_EMIT_INTERVAL * 10
         self._active_vessels = {
             k: v for k, v in self._active_vessels.items() if v > cutoff
+        }
+        # Drop per-vessel caches for vessels that went quiet so a long-running
+        # global feed doesn't grow these dicts without bound.
+        self._last_sent = {k: v for k, v in self._last_sent.items() if k in self._active_vessels}
+        self._static_data = {
+            k: v for k, v in self._static_data.items() if k in self._active_vessels
         }
         self._stats.active_items = len(self._active_vessels)
         self._stats.source_stats = self._source_stats
@@ -201,14 +210,16 @@ class AisWorker:
 
     def _build_bounding_boxes(self, source: dict) -> list:
         """
-        Priority: source lat/lon/distance → enablement geo_filter.
+        Priority: source lat/lon/distance → enablement geo_filter → whole
+        world when the source is in "Global" (`mil`) mode.
         Returns a list of [[min_lat, min_lon], [max_lat, max_lon]] boxes.
         """
         lat = source.get("lat")
         lon = source.get("lon")
         distance = source.get("distance")
+        is_global = (source.get("endpoint") or "").strip() == "mil"
 
-        if lat is not None and lon is not None and distance:
+        if not is_global and lat is not None and lon is not None and distance:
             return [_bbox_from_center(float(lat), float(lon), float(distance))]
 
         mn_lat = self.config.get("geo_filter_min_lat")
@@ -223,6 +234,9 @@ class AisWorker:
                     [float(mx_lat), float(mx_lon)],
                 ]
             ]
+
+        if is_global:
+            return [[[-90.0, -180.0], [90.0, 180.0]]]
 
         return []
 
