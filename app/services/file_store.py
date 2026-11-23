@@ -27,7 +27,12 @@ def is_valid_id(file_id: str) -> bool:
 
 def safe_stem(filename: str) -> str:
     """Reduce an uploaded filename to a filesystem-safe stem."""
-    stem = Path(filename).stem
+    # Split by hand rather than via Path.stem, whose handling of leading-dot
+    # names differs between Python versions.
+    name = re.split(r"[\\/]", filename)[-1]
+    stem, dot, _ = name.rpartition(".")
+    if not dot or not stem.strip("."):
+        stem = name
     cleaned = _UNSAFE_CHARS.sub("_", stem).strip("._")
     return cleaned[:128] or "file"
 
