@@ -32,7 +32,9 @@ class Settings(BaseSettings):
         return self.data_dir / "packages"
 
     # CORS
-    cors_origins: list[str] = ["*"]
+    # Same-origin deploys (UI and /api behind one host) need none; the default
+    # covers `next dev` talking to a local backend.
+    cors_origins: list[str] = ["http://localhost:3000"]
 
     # Debug
     debug: bool = False
